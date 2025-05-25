@@ -21,6 +21,12 @@ class TestUser extends BaseModel {
   @column()
   declare age?: number
 
+  @column()
+  declare status?: string
+
+  @column()
+  declare department?: string
+
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
 
@@ -731,5 +737,229 @@ test.group('MongoDB ODM - Integration Tests', (group) => {
 
     const smithUsers = await TestUser.query().where('name', 'like', '%Smith').all()
     assert.isAtLeast(smithUsers.length, 1)
+  })
+
+  test('should support enhanced Lucid-style query builder methods', async ({ assert }) => {
+    if (!isDockerAvailable) {
+      assert.plan(0)
+      return
+    }
+
+    // Create unique test data for enhanced query testing
+    const timestamp = Date.now()
+    const testUsers = [
+      {
+        name: 'John Doe Enhanced',
+        email: `enhanced-john-${timestamp}@example.com`,
+        age: 25,
+        status: 'active',
+      },
+      {
+        name: 'Jane Smith Enhanced',
+        email: `enhanced-jane-${timestamp}@gmail.com`,
+        age: 30,
+        status: 'inactive',
+      },
+      {
+        name: 'Bob Johnson Enhanced',
+        email: `enhanced-bob-${timestamp}@yahoo.com`,
+        age: 35,
+        status: 'active',
+      },
+      {
+        name: 'Alice Brown Enhanced',
+        email: `enhanced-alice-${timestamp}@example.com`,
+        age: 28,
+        status: 'pending',
+      },
+      {
+        name: 'Charlie Wilson Enhanced',
+        email: `enhanced-charlie-${timestamp}@gmail.com`,
+        age: 22,
+        status: 'active',
+      },
+    ]
+
+    const createdUsers = []
+    for (const userData of testUsers) {
+      const user = await TestUser.create(userData)
+      createdUsers.push(user)
+    }
+
+    // Test whereLike and whereILike
+    const likeUsers = await TestUser.query()
+      .where('email', 'like', `enhanced-%${timestamp}%`)
+      .whereLike('name', 'J%')
+      .all()
+    assert.isAtLeast(likeUsers.length, 1) // John
+
+    const iLikeUsers = await TestUser.query()
+      .where('email', 'like', `enhanced-%${timestamp}%`)
+      .whereILike('name', '%doe%')
+      .all()
+    assert.isAtLeast(iLikeUsers.length, 1) // John Doe (case-insensitive)
+
+    // Test andWhere (alias for where)
+    const andWhereUsers = await TestUser.query()
+      .where('email', 'like', `enhanced-%${timestamp}%`)
+      .where('age', '>=', 25)
+      .andWhere('status', 'active')
+      .all()
+    assert.isAtLeast(andWhereUsers.length, 1)
+
+    // Test whereNot and andWhereNot
+    const notInactiveUsers = await TestUser.query()
+      .where('email', 'like', `enhanced-%${timestamp}%`)
+      .whereNot('status', 'inactive')
+      .all()
+    assert.equal(notInactiveUsers.length, 4)
+
+    const notYoungUsers = await TestUser.query()
+      .where('email', 'like', `enhanced-%${timestamp}%`)
+      .whereNot('age', '<', 25)
+      .andWhereNot('status', 'pending')
+      .all()
+    assert.isAtLeast(notYoungUsers.length, 2)
+
+    // Test orWhereNot
+    const complexOrNotUsers = await TestUser.query()
+      .where('email', 'like', `enhanced-%${timestamp}%`)
+      .where('age', '>', 30)
+      .orWhereNot('status', 'inactive')
+      .all()
+    assert.isAtLeast(complexOrNotUsers.length, 1) // Only Bob (35, active) matches all conditions
+
+    // Test whereExists and whereNotExists
+    const usersWithAge = await TestUser.query()
+      .where('email', 'like', `enhanced-%${timestamp}%`)
+      .whereExists('age')
+      .all()
+    assert.equal(usersWithAge.length, 5)
+
+    // Test orWhereExists and orWhereNotExists
+    const existsOrUsers = await TestUser.query()
+      .where('email', 'like', `enhanced-%${timestamp}%`)
+      .where('age', '<', 20)
+      .orWhereExists('email')
+      .all()
+    assert.equal(existsOrUsers.length, 5) // All have email
+
+    // Test orWhereIn and orWhereNotIn
+    const inOrUsers = await TestUser.query()
+      .where('email', 'like', `enhanced-%${timestamp}%`)
+      .where('age', '>', 40)
+      .orWhereIn('status', ['active', 'pending'])
+      .all()
+    assert.equal(inOrUsers.length, 4)
+
+    const notInOrUsers = await TestUser.query()
+      .where('email', 'like', `enhanced-%${timestamp}%`)
+      .where('age', '<', 20)
+      .orWhereNotIn('status', ['inactive'])
+      .all()
+    assert.equal(notInOrUsers.length, 4)
+
+    // Test orWhereNull and orWhereNotNull
+    const nullOrUsers = await TestUser.query()
+      .where('email', 'like', `enhanced-%${timestamp}%`)
+      .where('age', '>', 100)
+      .orWhereNotNull('email')
+      .all()
+    assert.equal(nullOrUsers.length, 5) // All have email
+
+    // Test whereNotBetween and orWhereNotBetween
+    const notBetweenUsers = await TestUser.query()
+      .where('email', 'like', `enhanced-%${timestamp}%`)
+      .whereNotBetween('age', [26, 29])
+      .all()
+    assert.equal(notBetweenUsers.length, 4) // Should exclude ages 26-29 (only age 28)
+
+    const orNotBetweenUsers = await TestUser.query()
+      .where('email', 'like', `enhanced-%${timestamp}%`)
+      .where('status', 'nonexistent')
+      .orWhereNotBetween('age', [26, 29])
+      .all()
+    assert.equal(orNotBetweenUsers.length, 4)
+
+    // Test orWhereBetween
+    const orBetweenUsers = await TestUser.query()
+      .where('email', 'like', `enhanced-%${timestamp}%`)
+      .where('status', 'nonexistent')
+      .orWhereBetween('age', [25, 30])
+      .all()
+    assert.equal(orBetweenUsers.length, 3)
+
+    // Test offset (alias for skip)
+    const offsetUsers = await TestUser.query().orderBy('age', 'asc').offset(1).limit(2).all()
+    assert.equal(offsetUsers.length, 2)
+
+    // Test forPage
+    const pageUsers = await TestUser.query()
+      .orderBy('age', 'asc')
+      .forPage(2, 2) // page 2, 2 per page
+      .all()
+    assert.equal(pageUsers.length, 2)
+
+    // Test clone
+    const baseQuery = TestUser.query().where('status', 'active').orderBy('age', 'desc')
+    const clonedQuery = baseQuery.clone()
+
+    const baseResults = await baseQuery.limit(2).all()
+    const clonedResults = await clonedQuery.limit(3).all()
+
+    assert.equal(baseResults.length, 2)
+    assert.equal(clonedResults.length, 3)
+    // Both should have same filtering but different limits
+    assert.equal(baseResults[0]._id.toString(), clonedResults[0]._id.toString()) // First result should be same
+
+    // Test distinct (simplified test)
+    const distinctAges = await TestUser.query().distinct('age').all()
+    assert.isAtLeast(distinctAges.length, 1)
+
+    // Clean up test data
+    await TestUser.query().where('email', 'like', `enhanced-%${timestamp}%`).delete()
+  })
+
+  test('should support groupBy and having with aggregation', async ({ assert }) => {
+    if (!isDockerAvailable) {
+      assert.plan(0)
+      return
+    }
+
+    // Create test data for aggregation
+    const testData = [
+      { name: 'User A', age: 25, department: 'Engineering' },
+      { name: 'User B', age: 30, department: 'Engineering' },
+      { name: 'User C', age: 35, department: 'Marketing' },
+      { name: 'User D', age: 28, department: 'Marketing' },
+      { name: 'User E', age: 32, department: 'Sales' },
+    ]
+
+    for (const userData of testData) {
+      await TestUser.create({
+        ...userData,
+        email: `agg-${Date.now()}-${userData.name.toLowerCase().replace(' ', '')}@example.com`,
+      })
+    }
+
+    // Test groupBy
+    const groupedResults = await TestUser.query()
+      .where('email', 'like', 'agg-%')
+      .groupBy('department')
+      .all()
+
+    assert.isAtLeast(groupedResults.length, 3) // Should have 3 departments
+
+    // Test groupBy with having
+    const havingResults = await TestUser.query()
+      .where('email', 'like', 'agg-%')
+      .groupBy('department')
+      .having('count', '>=', 2)
+      .all()
+
+    assert.isAtLeast(havingResults.length, 2) // Engineering and Marketing have 2+ users
+
+    // Clean up
+    await TestUser.query().where('email', 'like', 'agg-%').delete()
   })
 })

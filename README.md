@@ -292,19 +292,57 @@ const users = await User.query().whereNotIn('role', ['admin', 'moderator']).all(
 
 // Between values
 const users = await User.query().whereBetween('age', [18, 65]).all()
+const users = await User.query().whereNotBetween('age', [13, 17]).all()
 
 // Pattern matching with like
 const users = await User.query().where('name', 'like', 'John%').all()
-const users = await User.query().where('email', 'like', '%@gmail.com').all()
+const users = await User.query().whereLike('name', 'John%').all() // Case-sensitive
+const users = await User.query().whereILike('name', 'john%').all() // Case-insensitive
+
+// Field existence
+const users = await User.query().whereExists('profilePicture').all()
+const users = await User.query().whereNotExists('deletedAt').all()
+
+// Negation queries
+const users = await User.query().whereNot('status', 'banned').all()
+const users = await User.query().whereNot('age', '<', 18).all()
+
+// Complex OR conditions
+const users = await User.query()
+  .where('role', 'admin')
+  .orWhere('permissions', 'like', '%manage%')
+  .orWhereIn('department', ['IT', 'Security'])
+  .orWhereNotNull('specialAccess')
+  .all()
+
+// Alias methods for clarity
+const users = await User.query()
+  .where('age', '>=', 18)
+  .andWhere('status', 'active') // Same as .where()
+  .andWhereNot('role', 'guest') // Same as .whereNot()
+  .all()
 
 // Sorting
 const users = await User.query().orderBy('createdAt', 'desc').orderBy('name', 'asc').all()
 
-// Limiting and skipping
+// Limiting and pagination
 const users = await User.query().limit(10).skip(20).all()
+const users = await User.query().offset(20).limit(10).all() // offset is alias for skip
+const users = await User.query().forPage(3, 10).all() // page 3, 10 per page
 
 // Field selection
 const users = await User.query().select(['name', 'email']).all()
+
+// Distinct values
+const uniqueRoles = await User.query().distinct('role').all()
+
+// Grouping and aggregation
+const departmentStats = await User.query().groupBy('department').having('count', '>=', 5).all()
+
+// Query cloning
+const baseQuery = User.query().where('status', 'active')
+const adminQuery = baseQuery.clone().where('role', 'admin')
+const userQuery = baseQuery.clone().where('role', 'user')
 ```
 
 #### Pagination
@@ -437,23 +475,74 @@ export default class User extends BaseModel {
 
 ### Query Builder
 
-#### Query Methods
+#### Basic Query Methods
 
 - `where(field, value)` - Add where condition
 - `where(field, operator, value)` - Add where condition with operator
+- `andWhere(field, value)` - Alias for where method
+- `whereNot(field, value)` - Add where not condition
+- `whereNot(field, operator, value)` - Add where not condition with operator
+- `andWhereNot(field, value)` - Alias for whereNot method
+
+#### OR Query Methods
+
 - `orWhere(field, value)` - Add OR where condition
+- `orWhere(field, operator, value)` - Add OR where condition with operator
+- `orWhereNot(field, value)` - Add OR where not condition
+- `orWhereNot(field, operator, value)` - Add OR where not condition with operator
+
+#### Pattern Matching
+
+- `whereLike(field, pattern)` - Case-sensitive pattern matching
+- `whereILike(field, pattern)` - Case-insensitive pattern matching
+
+#### Null Checks
+
 - `whereNull(field)` - Where field is null
 - `whereNotNull(field)` - Where field is not null
+- `orWhereNull(field)` - OR where field is null
+- `orWhereNotNull(field)` - OR where field is not null
+
+#### Field Existence
+
+- `whereExists(field)` - Where field exists
+- `whereNotExists(field)` - Where field does not exist
+- `orWhereExists(field)` - OR where field exists
+- `orWhereNotExists(field)` - OR where field does not exist
+
+#### Array Operations
+
 - `whereIn(field, values)` - Where field is in array
 - `whereNotIn(field, values)` - Where field is not in array
+- `orWhereIn(field, values)` - OR where field is in array
+- `orWhereNotIn(field, values)` - OR where field is not in array
+
+#### Range Operations
+
 - `whereBetween(field, [min, max])` - Where field is between values
+- `whereNotBetween(field, [min, max])` - Where field is not between values
+- `orWhereBetween(field, [min, max])` - OR where field is between values
+- `orWhereNotBetween(field, [min, max])` - OR where field is not between values
+
+#### Aggregation and Grouping
+
+- `distinct(field)` - Get distinct values for field
+- `groupBy(...fields)` - Group results by fields
+- `having(field, value)` - Add having condition for grouped results
+- `having(field, operator, value)` - Add having condition with operator
 
 #### Sorting and Limiting
 
 - `orderBy(field, direction)` - Add sorting
 - `limit(count)` - Limit results
 - `skip(count)` - Skip results
+- `offset(count)` - Alias for skip method
+- `forPage(page, perPage)` - Set pagination using page and perPage
 - `select(fields)` - Select specific fields
+
+#### Utility Methods
+
+- `clone()` - Clone the query builder instance
 
 #### Execution Methods
 
@@ -464,6 +553,7 @@ export default class User extends BaseModel {
 - `paginate(page, perPage)` - Get paginated results
 - `count()` - Count matching documents
 - `ids()` - Get array of IDs
+- `update(data)` - Update matching documents
 - `delete()` - Delete matching documents
 
 ## Examples
