@@ -1,107 +1,234 @@
-import User from '../app/models/user.js'
-
 /**
- * Basic MongoDB ODM Usage Example
+ * BASIC USAGE EXAMPLE
  *
- * This example demonstrates how to use the MongoDB ODM with AdonisJS v6.
- * Make sure to configure your MongoDB connection in config/mongodb.ts
- * and set the appropriate environment variables.
+ * This example demonstrates the basic usage of the MongoDB ODM
+ * using real models from the application.
  */
 
-async function basicUsageExample() {
-  try {
-    console.log('🚀 MongoDB ODM Basic Usage Example')
-    console.log('=====================================')
+import UserWithReferencedProfile from '../app/models/user_with_referenced_profile.js'
+import Profile from '../app/models/profile.js'
+import Post from '../app/models/post.js'
 
-    // Create a new user
-    console.log('\n📝 Creating a new user...')
-    const user = await User.create({
+async function basicUsageExample() {
+  console.log('🚀 MongoDB ODM Basic Usage Example')
+  console.log('==================================\n')
+
+  try {
+    // 1. CREATE OPERATIONS
+    console.log('1. Create Operations')
+    console.log('-------------------')
+
+    // Create a user
+    const user = await UserWithReferencedProfile.create({
       name: 'John Doe',
-      email: 'john@example.com',
+      email: 'john.doe@example.com',
       age: 30,
     })
-    console.log('✅ User created:', user.toDocument())
 
-    // Find the user by ID
-    console.log('\n🔍 Finding user by ID...')
-    const foundUser = await User.find(user._id!)
-    console.log('✅ User found:', foundUser?.toDocument())
+    console.log(`✅ Created user: ${user.name} (ID: ${user._id})`)
 
-    // Find user by email
-    console.log('\n🔍 Finding user by email...')
-    const userByEmail = await User.findBy('email', 'john@example.com')
-    console.log('✅ User found by email:', userByEmail?.toDocument())
-
-    // Update the user
-    console.log('\n✏️ Updating user...')
-    if (foundUser) {
-      foundUser.merge({ age: 31 })
-      await foundUser.save()
-      console.log('✅ User updated:', foundUser.toDocument())
-    }
-
-    // Query with conditions
-    console.log('\n🔍 Querying users with conditions...')
-    const adults = await User.query().where('age', '>=', 18).orderBy('name', 'asc').all()
-    console.log('✅ Adult users found:', adults.length)
-
-    // Pagination example
-    console.log('\n📄 Pagination example...')
-    const paginatedUsers = await User.query().orderBy('createdAt', 'desc').paginate(1, 10)
-    console.log('✅ Paginated users:', {
-      total: paginatedUsers.meta.total,
-      currentPage: paginatedUsers.meta.currentPage,
-      perPage: paginatedUsers.meta.perPage,
-      users: paginatedUsers.data.length,
+    // Create a profile for the user
+    const profile = await Profile.create({
+      firstName: 'John',
+      lastName: 'Doe',
+      bio: 'Software developer passionate about MongoDB and AdonisJS',
+      phoneNumber: '+1-555-0123',
+      userId: user._id,
+      address: {
+        street: '123 Main St',
+        city: 'San Francisco',
+        state: 'CA',
+        zipCode: '94105',
+        country: 'USA',
+      },
+      socialLinks: {
+        twitter: 'https://twitter.com/johndoe',
+        linkedin: 'https://linkedin.com/in/johndoe',
+        github: 'https://github.com/johndoe',
+      },
     })
 
-    // Create multiple users
-    console.log('\n📝 Creating multiple users...')
-    const users = await User.createMany([
-      { name: 'Jane Smith', email: 'jane@example.com', age: 25 },
-      { name: 'Bob Johnson', email: 'bob@example.com', age: 35 },
-      { name: 'Alice Brown', email: 'alice@example.com', age: 28 },
-    ])
-    console.log('✅ Multiple users created:', users.length)
+    console.log(`✅ Created profile: ${profile.fullName} (ID: ${profile._id})`)
 
-    // Update or create
-    console.log('\n🔄 Update or create example...')
-    const updatedOrCreated = await User.updateOrCreate(
-      { email: 'john@example.com' },
-      { name: 'John Doe Updated', age: 32 }
+    // Create some posts
+    const post1 = await Post.create({
+      title: 'Getting Started with MongoDB ODM',
+      content: 'This is a comprehensive guide to using MongoDB with AdonisJS...',
+      status: 'published',
+      tags: ['mongodb', 'adonisjs', 'tutorial'],
+      authorId: user._id,
+    })
+
+    const post2 = await Post.create({
+      title: 'Advanced Query Techniques',
+      content: 'Learn how to write complex queries using the MongoDB ODM...',
+      status: 'draft',
+      tags: ['mongodb', 'queries', 'advanced'],
+      authorId: user._id,
+    })
+
+    console.log(`✅ Created posts: "${post1.title}" and "${post2.title}"`)
+
+    // 2. READ OPERATIONS
+    console.log('\n2. Read Operations')
+    console.log('-----------------')
+
+    // Find user by ID
+    const foundUser = await UserWithReferencedProfile.find(user._id)
+    console.log(`✅ Found user by ID: ${foundUser?.name}`)
+
+    // Find user by email
+    const userByEmail = await UserWithReferencedProfile.findBy('email', 'john.doe@example.com')
+    console.log(`✅ Found user by email: ${userByEmail?.name}`)
+
+    // Query with conditions
+    const publishedPosts = await Post.query().where('status', 'published').all()
+    console.log(`✅ Found ${publishedPosts.length} published posts`)
+
+    // Query with multiple conditions
+    const userPosts = await Post.query()
+      .where('authorId', user._id)
+      .where('status', 'published')
+      .orderBy('createdAt', 'desc')
+      .all()
+
+    console.log(`✅ Found ${userPosts.length} published posts by user`)
+
+    // 3. RELATIONSHIP LOADING
+    console.log('\n3. Relationship Loading')
+    console.log('-----------------------')
+
+    // Load user with profile
+    const userWithProfile = await UserWithReferencedProfile.query()
+      .where('_id', user._id)
+      .load('profile')
+      .first()
+
+    if (userWithProfile?.profile) {
+      console.log(`✅ Loaded user with profile: ${userWithProfile.profile.fullName}`)
+      console.log(`   Bio: ${userWithProfile.profile.bio}`)
+      console.log(`   Address: ${userWithProfile.profile.formattedAddress}`)
+    }
+
+    // Load posts with author and profile
+    const postsWithAuthors = await Post.query()
+      .load('author', (authorQuery) => {
+        authorQuery.load('profile')
+      })
+      .all()
+
+    console.log(`✅ Loaded ${postsWithAuthors.length} posts with authors and profiles`)
+
+    postsWithAuthors.forEach((post, index) => {
+      console.log(`   ${index + 1}. ${post.title} by ${post.author?.name}`)
+      if (post.author?.profile) {
+        console.log(`      Author: ${post.author.profile.fullName}`)
+      }
+    })
+
+    // 4. UPDATE OPERATIONS
+    console.log('\n4. Update Operations')
+    console.log('-------------------')
+
+    // Update user directly
+    user.age = 31
+    await user.save()
+    console.log(`✅ Updated user age to: ${user.age}`)
+
+    // Update using merge
+    await user.merge({ name: 'John Smith' }).save()
+    console.log(`✅ Updated user name to: ${user.name}`)
+
+    // Update profile
+    if (profile) {
+      profile.bio = 'Senior software developer with expertise in MongoDB and AdonisJS'
+      await profile.save()
+      console.log(`✅ Updated profile bio`)
+    }
+
+    // Bulk update
+    const updatedCount = await Post.query()
+      .where('authorId', user._id)
+      .where('status', 'draft')
+      .update({ status: 'published' })
+
+    console.log(`✅ Published ${updatedCount} draft posts`)
+
+    // 5. ADVANCED QUERIES
+    console.log('\n5. Advanced Queries')
+    console.log('------------------')
+
+    // Pagination
+    const paginatedUsers = await UserWithReferencedProfile.query().load('profile').paginate(1, 5)
+
+    console.log(`✅ Paginated users: ${paginatedUsers.data.length} users on page 1`)
+    console.log(`   Total: ${paginatedUsers.meta.total}, Pages: ${paginatedUsers.meta.lastPage}`)
+
+    // Count queries
+    const totalPosts = await Post.query().count()
+    const publishedCount = await Post.query().where('status', 'published').count()
+
+    console.log(`✅ Total posts: ${totalPosts}, Published: ${publishedCount}`)
+
+    // Complex queries
+    const recentPosts = await Post.query()
+      .where('status', 'published')
+      .where('createdAt', '>=', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)) // Last 30 days
+      .orderBy('createdAt', 'desc')
+      .limit(10)
+      .all()
+
+    console.log(`✅ Found ${recentPosts.length} recent published posts`)
+
+    // 6. AGGREGATION
+    console.log('\n6. Aggregation')
+    console.log('-------------')
+
+    // Get all user IDs
+    const userIds = await UserWithReferencedProfile.query().ids()
+    console.log(`✅ Found ${userIds.length} user IDs`)
+
+    // Get posts by status
+    const draftPosts = await Post.query().where('status', 'draft').all()
+    const archivedPosts = await Post.query().where('status', 'archived').all()
+
+    console.log(
+      `✅ Posts by status: ${publishedCount} published, ${draftPosts.length} draft, ${archivedPosts.length} archived`
     )
-    console.log('✅ User updated or created:', updatedOrCreated.toDocument())
 
-    // Count users
-    console.log('\n🔢 Counting users...')
-    const userCount = await User.query().count()
-    console.log('✅ Total users:', userCount)
+    // 7. DELETE OPERATIONS
+    console.log('\n7. Delete Operations')
+    console.log('-------------------')
 
-    // Delete a user
-    console.log('\n🗑️ Deleting a user...')
-    if (foundUser) {
-      const deleted = await foundUser.delete()
-      console.log('✅ User deleted:', deleted)
+    // Delete a specific post
+    const postToDelete = await Post.query().where('status', 'draft').first()
+    if (postToDelete) {
+      await postToDelete.delete()
+      console.log(`✅ Deleted post: "${postToDelete.title}"`)
     }
 
-    console.log('\n🎉 Example completed successfully!')
+    // Bulk delete
+    const deletedCount = await Post.query().where('status', 'archived').delete()
+
+    console.log(`✅ Deleted ${deletedCount} archived posts`)
+
+    console.log('\n🎉 Basic Usage Example Complete!')
+    console.log('================================')
+    console.log('✅ Created users, profiles, and posts')
+    console.log('✅ Performed various read operations')
+    console.log('✅ Loaded relationships efficiently')
+    console.log('✅ Updated records using different methods')
+    console.log('✅ Executed advanced queries and aggregations')
+    console.log('✅ Cleaned up with delete operations')
   } catch (error) {
-    console.error('❌ Error in example:', error.message)
-
-    if (error.message.includes('Database connection not configured')) {
-      console.log('\n💡 To fix this error:')
-      console.log('1. Make sure MongoDB is running')
-      console.log('2. Configure your MongoDB connection in config/mongodb.ts')
-      console.log('3. Set environment variables (MONGO_HOST, MONGO_PORT, etc.)')
-      console.log('4. Register the MongoDB provider in your AdonisJS app')
-    }
+    console.error('❌ Error in basic usage example:', error)
   }
 }
 
-// Export the example function
+// Export for use in other examples
 export { basicUsageExample }
 
 // Run the example if this file is executed directly
 if (import.meta.url === `file://${process.argv[1]}`) {
-  basicUsageExample()
+  basicUsageExample().catch(console.error)
 }

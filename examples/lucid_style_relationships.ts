@@ -1,326 +1,315 @@
-import { BaseModel } from '../src/base_model/base_model.js'
-import { column, hasOne, hasMany, belongsTo } from '../src/decorators/column.js'
-import { DateTime } from 'luxon'
-import type { HasOne, HasMany, BelongsTo } from '../src/types/relationships.js'
-
 /**
- * Lucid-Style Relationships Example
+ * LUCID-STYLE RELATIONSHIPS EXAMPLE
  *
- * This example demonstrates the improved developer experience using
- * Lucid-style relationship decorators that automatically handle model
- * setup with direct property access like AdonisJS Lucid ORM.
+ * This example demonstrates how our MongoDB ODM provides Lucid-style
+ * relationship handling with type safety and efficient loading.
+ *
+ * Key Features Demonstrated:
+ * - HasOne relationships (User -> Profile)
+ * - BelongsTo relationships (Post -> User)
+ * - Eager loading with .load()
+ * - Nested relationship loading
+ * - Type-safe relationship access
  */
 
-// ========================================
-// Model Definitions with Lucid-Style Relationships
-// ========================================
+import UserWithReferencedProfile from '../app/models/user_with_referenced_profile.js'
+import Profile from '../app/models/profile.js'
+import Post from '../app/models/post.js'
 
-/**
- * User model with hasOne and hasMany relationships
- */
-class User extends BaseModel {
-  @column({ isPrimary: true })
-  declare _id: string
-
-  @column()
-  declare name: string
-
-  @column()
-  declare email: string
-
-  @column()
-  declare age?: number
-
-  // HasOne relationship - creates proxy for direct property access
-  @hasOne(() => Profile, {
-    localKey: '_id',
-    foreignKey: 'userId',
-  })
-  declare profile: HasOne<typeof Profile>
-
-  // HasMany relationship - creates array-like proxy for direct access
-  @hasMany(() => Post, {
-    localKey: '_id',
-    foreignKey: 'authorId',
-  })
-  declare posts: HasMany<typeof Post>
-
-  @column.dateTime({ autoCreate: true })
-  declare createdAt: DateTime
-
-  @column.dateTime({ autoCreate: true, autoUpdate: true })
-  declare updatedAt: DateTime
-
-  static getCollectionName(): string {
-    return 'users'
-  }
-}
-
-/**
- * Profile model with belongsTo relationship
- */
-class Profile extends BaseModel {
-  @column({ isPrimary: true })
-  declare _id: string
-
-  @column()
-  declare firstName: string
-
-  @column()
-  declare lastName: string
-
-  @column()
-  declare bio?: string
-
-  @column()
-  declare avatar?: string
-
-  // Foreign key field
-  @column()
-  declare userId: string
-
-  // BelongsTo relationship - creates proxy for direct property access
-  @belongsTo(() => User, {
-    localKey: 'userId',
-    foreignKey: '_id',
-  })
-  declare user: BelongsTo<typeof User>
-
-  @column.dateTime({ autoCreate: true })
-  declare createdAt: DateTime
-
-  @column.dateTime({ autoCreate: true, autoUpdate: true })
-  declare updatedAt: DateTime
-
-  get fullName(): string {
-    return `${this.firstName} ${this.lastName}`.trim()
-  }
-
-  static getCollectionName(): string {
-    return 'profiles'
-  }
-}
-
-/**
- * Post model with belongsTo relationship
- */
-class Post extends BaseModel {
-  @column({ isPrimary: true })
-  declare _id: string
-
-  @column()
-  declare title: string
-
-  @column()
-  declare content: string
-
-  @column()
-  declare status: 'draft' | 'published' | 'archived'
-
-  // Foreign key field
-  @column()
-  declare authorId: string
-
-  // BelongsTo relationship - creates proxy for direct property access
-  @belongsTo(() => User, {
-    localKey: 'authorId',
-    foreignKey: '_id',
-  })
-  declare author: BelongsTo<typeof User>
-
-  @column.dateTime({ autoCreate: true })
-  declare createdAt: DateTime
-
-  @column.dateTime({ autoCreate: true, autoUpdate: true })
-  declare updatedAt: DateTime
-
-  static getCollectionName(): string {
-    return 'posts'
-  }
-}
-
-/**
- * Example usage of the Lucid-style relationships
- */
 async function lucidStyleRelationshipsExample() {
-  console.log('🚀 Lucid-Style Relationships Example')
-  console.log('====================================')
+  console.log('🔗 Lucid-Style Relationships Example')
+  console.log('====================================\n')
 
   try {
-    // ========================================
-    // 1. Create User with HasOne Profile
-    // ========================================
-    console.log('\n📝 Creating user with hasOne profile relationship...')
+    // 1. CREATE DATA WITH RELATIONSHIPS
+    console.log('1. Creating Users, Profiles, and Posts')
+    console.log('--------------------------------------')
 
-    const user = await User.create({
-      name: 'John Doe',
-      email: 'john@example.com',
-      age: 30,
+    // Create users
+    const author1 = await UserWithReferencedProfile.create({
+      name: 'Alice Johnson',
+      email: 'alice@example.com',
+      age: 28,
     })
 
-    // Create related profile using the relationship
-    const profile = await user.profile.create({
-      firstName: 'John',
-      lastName: 'Doe',
-      bio: 'Software Developer',
-      avatar: 'https://example.com/avatar.jpg',
+    const author2 = await UserWithReferencedProfile.create({
+      name: 'Bob Smith',
+      email: 'bob@example.com',
+      age: 32,
     })
 
-    console.log('✅ User created:', user.name)
-    console.log('✅ Profile created:', profile.fullName)
+    console.log(`✅ Created authors: ${author1.name} and ${author2.name}`)
 
-    // ========================================
-    // 2. Create Posts with HasMany Relationship
-    // ========================================
-    console.log('\n📝 Creating posts with hasMany relationship...')
-
-    const post1 = await user.posts.create({
-      title: 'Getting Started with MongoDB ODM',
-      content: 'This is a comprehensive guide...',
-      status: 'published',
+    // Create profiles for users
+    const profile1 = await Profile.create({
+      firstName: 'Alice',
+      lastName: 'Johnson',
+      bio: 'Full-stack developer with expertise in Node.js and MongoDB',
+      phoneNumber: '+1-555-0101',
+      userId: author1._id,
+      address: {
+        street: '123 Tech Street',
+        city: 'San Francisco',
+        state: 'CA',
+        zipCode: '94105',
+        country: 'USA',
+      },
+      socialLinks: {
+        twitter: 'https://twitter.com/alicejohnson',
+        linkedin: 'https://linkedin.com/in/alicejohnson',
+        github: 'https://github.com/alicejohnson',
+      },
     })
 
-    const post2 = await user.posts.create({
-      title: 'Advanced Query Techniques',
-      content: 'Learn advanced querying...',
-      status: 'draft',
+    const profile2 = await Profile.create({
+      firstName: 'Bob',
+      lastName: 'Smith',
+      bio: 'Backend engineer specializing in database optimization',
+      phoneNumber: '+1-555-0102',
+      userId: author2._id,
+      address: {
+        street: '456 Code Avenue',
+        city: 'Seattle',
+        state: 'WA',
+        zipCode: '98101',
+        country: 'USA',
+      },
+      socialLinks: {
+        linkedin: 'https://linkedin.com/in/bobsmith',
+        github: 'https://github.com/bobsmith',
+      },
     })
 
-    console.log('✅ Posts created:', [post1.title, post2.title])
+    console.log(`✅ Created profiles for ${profile1.fullName} and ${profile2.fullName}`)
 
-    // ========================================
-    // 3. Eager Loading Relationships (like Lucid's preload)
-    // ========================================
-    console.log('\n📖 Eager loading relationships...')
-
-    // Eager load relationships to avoid N+1 queries (like Lucid's preload)
-    const usersWithData = await User.query().load('profile').load('posts').all()
-    console.log('✅ Users with eager loaded data:', usersWithData.length)
-
-    usersWithData.forEach((loadedUser) => {
-      console.log('✅ Profile already loaded:', loadedUser.profile?.fullName) // Direct access!
-      console.log('✅ Posts already loaded:', loadedUser.posts?.length || 0) // Direct access!
-    })
-
-    // Load with constraints (like Lucid's preload with callback)
-    const usersWithPublishedPosts = await User.query()
-      .load('posts', (postsQuery) => {
-        postsQuery.where('status', 'published')
-      })
-      .all()
-    console.log('✅ Users with published posts loaded:', usersWithPublishedPosts.length)
-
-    // ========================================
-    // 4. Lazy Loading Relationships (on-demand)
-    // ========================================
-    console.log('\n📖 Lazy loading relationships...')
-
-    // Load user's profile
-    await user.profile.load()
-    console.log('✅ Profile loaded:', user.profile.fullName) // Direct property access!
-
-    // Load user's posts
-    const userPosts = await user.posts.load()
-    console.log('✅ Posts loaded:', userPosts.length)
-
-    // Load post's author (belongsTo relationship)
-    await post1.author.load()
-    console.log('✅ Author loaded:', post1.author.name) // Direct property access!
-
-    // ========================================
-    // 5. Query Through Relationships
-    // ========================================
-    console.log('\n🔍 Querying through relationships...')
-
-    // Query user's published posts only
-    const publishedPosts = await user.posts.query().where('status', 'published').all()
-    console.log('✅ Published posts found:', publishedPosts.length)
-
-    // Query profiles with specific criteria
-    const activeBio = await user.profile.query().whereNotNull('bio').first()
-    console.log('✅ Profile with bio found:', !!activeBio)
-
-    // Eager load with query constraints (like Lucid's preload)
-    const usersWithActivePosts = await User.query()
-      .load('posts', (postsQuery) => {
-        postsQuery.where('status', 'published').orderBy('createdAt', 'desc')
-      })
-      .all()
-    console.log('✅ Users with active posts loaded:', usersWithActivePosts.length)
-
-    // ========================================
-    // 6. Relationship Operations
-    // ========================================
-    console.log('\n🔄 Relationship operations...')
-
-    // Update related profile - direct property access!
-    await user.profile.load() // Load the profile first
-    if (user.profile.firstName) {
-      // Direct property access works, but for saving we need to get the actual instance
-      const profileInstance = await user.profile.load()
-      if (profileInstance) {
-        profileInstance.bio = 'Senior Software Developer'
-        await profileInstance.save()
-        console.log('✅ Profile updated via relationship')
-      }
-    }
-
-    // Create multiple posts at once
-    const morePosts = await user.posts.createMany([
+    // Create posts
+    const posts = await Post.createMany([
       {
-        title: 'TypeScript Best Practices',
-        content: 'Learn TypeScript...',
+        title: 'Introduction to MongoDB with AdonisJS',
+        content: 'Learn how to integrate MongoDB with AdonisJS for modern web applications...',
+        status: 'published',
+        tags: ['mongodb', 'adonisjs', 'tutorial'],
+        authorId: author1._id,
+      },
+      {
+        title: 'Advanced Query Optimization Techniques',
+        content: 'Discover advanced techniques for optimizing MongoDB queries...',
+        status: 'published',
+        tags: ['mongodb', 'optimization', 'performance'],
+        authorId: author2._id,
+      },
+      {
+        title: 'Building Scalable APIs with Node.js',
+        content: 'Best practices for building scalable and maintainable APIs...',
         status: 'draft',
+        tags: ['nodejs', 'api', 'scalability'],
+        authorId: author1._id,
       },
       {
         title: 'Database Design Patterns',
-        content: 'Effective database design...',
+        content: 'Common patterns and anti-patterns in database design...',
         status: 'published',
+        tags: ['database', 'design', 'patterns'],
+        authorId: author2._id,
       },
     ])
-    console.log('✅ Multiple posts created:', morePosts.length)
 
-    // ========================================
-    // 7. BelongsTo Operations
-    // ========================================
-    console.log('\n🔗 BelongsTo operations...')
+    console.log(`✅ Created ${posts.length} posts`)
 
-    // Create a new profile and associate it with a user
-    const newProfile = new Profile()
-    newProfile.firstName = 'Jane'
-    newProfile.lastName = 'Smith'
-    newProfile.bio = 'UX Designer'
+    // 2. HASONE RELATIONSHIP LOADING
+    console.log('\n2. HasOne Relationship Loading (User -> Profile)')
+    console.log('-----------------------------------------------')
 
-    await newProfile.user.associate(user)
-    console.log('✅ Profile associated with user')
+    // Load user with profile
+    const userWithProfile = await UserWithReferencedProfile.query()
+      .where('_id', author1._id)
+      .load('profile')
+      .first()
 
-    // Dissociate (if needed)
-    // await newProfile.user.dissociate()
+    if (userWithProfile?.profile) {
+      console.log(`✅ Loaded user: ${userWithProfile.name}`)
+      console.log(`   Profile: ${userWithProfile.profile.fullName}`)
+      console.log(`   Bio: ${userWithProfile.profile.bio}`)
+      console.log(`   Address: ${userWithProfile.profile.formattedAddress}`)
+      console.log(
+        `   Social Links: ${Object.keys(userWithProfile.profile.socialLinks || {}).join(', ')}`
+      )
+    }
 
-    console.log('\n🎉 Lucid-style relationships example completed!')
+    // Load multiple users with profiles
+    const usersWithProfiles = await UserWithReferencedProfile.query()
+      .load('profile')
+      .orderBy('name', 'asc')
+      .all()
 
-    // ========================================
-    // 8. Benefits Summary
-    // ========================================
-    console.log('\n💡 BENEFITS OF LUCID-STYLE DECORATORS')
-    console.log('====================================')
-    console.log('✅ Direct property access like Lucid ORM - no .related needed!')
-    console.log("✅ Eager loading with .load() method (like Lucid's .preload())")
-    console.log('✅ Automatic relationship proxy creation when decorators are used')
-    console.log('✅ Familiar API for developers coming from Lucid ORM')
-    console.log('✅ Type-safe relationship definitions')
-    console.log('✅ Consistent with AdonisJS patterns and conventions')
-    console.log('✅ Cleaner, more maintainable code')
-    console.log('✅ Prevents N+1 query problems with eager loading')
+    console.log(`\n✅ Loaded ${usersWithProfiles.length} users with profiles:`)
+    usersWithProfiles.forEach((user, index) => {
+      console.log(`   ${index + 1}. ${user.name} (${user.email})`)
+      if (user.profile) {
+        console.log(`      Profile: ${user.profile.fullName} - ${user.profile.bio}`)
+      }
+    })
+
+    // 3. BELONGSTO RELATIONSHIP LOADING
+    console.log('\n3. BelongsTo Relationship Loading (Post -> User)')
+    console.log('-----------------------------------------------')
+
+    // Load posts with authors
+    const postsWithAuthors = await Post.query()
+      .where('status', 'published')
+      .load('author')
+      .orderBy('createdAt', 'desc')
+      .all()
+
+    console.log(`✅ Loaded ${postsWithAuthors.length} published posts with authors:`)
+    postsWithAuthors.forEach((post, index) => {
+      console.log(`   ${index + 1}. "${post.title}"`)
+      console.log(`      Author: ${post.author?.name} (${post.author?.email})`)
+      console.log(`      Tags: ${post.tags?.join(', ')}`)
+      console.log(`      Status: ${post.status}`)
+    })
+
+    // 4. NESTED RELATIONSHIP LOADING
+    console.log('\n4. Nested Relationship Loading (Post -> User -> Profile)')
+    console.log('-------------------------------------------------------')
+
+    // Load posts with authors and their profiles
+    const postsWithFullAuthors = await Post.query()
+      .load('author', (authorQuery) => {
+        authorQuery.load('profile')
+      })
+      .orderBy('title', 'asc')
+      .all()
+
+    console.log(`✅ Loaded ${postsWithFullAuthors.length} posts with full author information:`)
+    postsWithFullAuthors.forEach((post, index) => {
+      console.log(`   ${index + 1}. "${post.title}" (${post.status})`)
+      if (post.author) {
+        console.log(`      Author: ${post.author.name}`)
+        if (post.author.profile) {
+          console.log(`      Full Name: ${post.author.profile.fullName}`)
+          console.log(`      Bio: ${post.author.profile.bio}`)
+          console.log(
+            `      Location: ${post.author.profile.address?.city}, ${post.author.profile.address?.state}`
+          )
+        }
+      }
+      console.log('')
+    })
+
+    // 5. CONDITIONAL RELATIONSHIP LOADING
+    console.log('5. Conditional Relationship Loading')
+    console.log('-----------------------------------')
+
+    // Load users with profiles that have specific criteria
+    const usersWithDetailedProfiles = await UserWithReferencedProfile.query()
+      .load('profile', (profileQuery) => {
+        profileQuery.whereNotNull('bio')
+        profileQuery.whereNotNull('socialLinks')
+      })
+      .all()
+
+    console.log(`✅ Loaded ${usersWithDetailedProfiles.length} users with detailed profiles:`)
+    usersWithDetailedProfiles.forEach((user, index) => {
+      if (user.profile) {
+        console.log(`   ${index + 1}. ${user.profile.fullName}`)
+        console.log(`      Bio: ${user.profile.bio}`)
+        const socialCount = Object.keys(user.profile.socialLinks || {}).length
+        console.log(`      Social Links: ${socialCount} platforms`)
+      }
+    })
+
+    // 6. RELATIONSHIP QUERIES WITH FILTERS
+    console.log('\n6. Relationship Queries with Filters')
+    console.log('------------------------------------')
+
+    // Find posts by specific authors
+    const alicePosts = await Post.query()
+      .where('authorId', author1._id)
+      .load('author', (authorQuery) => {
+        authorQuery.load('profile')
+      })
+      .orderBy('status', 'desc')
+      .all()
+
+    console.log(`✅ Found ${alicePosts.length} posts by ${author1.name}:`)
+    alicePosts.forEach((post, index) => {
+      console.log(`   ${index + 1}. "${post.title}" (${post.status})`)
+      console.log(`      Tags: ${post.tags?.join(', ')}`)
+    })
+
+    // Find published posts with author profiles
+    const publishedPostsWithProfiles = await Post.query()
+      .where('status', 'published')
+      .load('author', (authorQuery) => {
+        authorQuery.load('profile', (profileQuery) => {
+          profileQuery.whereNotNull('socialLinks')
+        })
+      })
+      .all()
+
+    console.log(
+      `\n✅ Found ${publishedPostsWithProfiles.length} published posts with social authors:`
+    )
+    publishedPostsWithProfiles.forEach((post, index) => {
+      if (post.author?.profile?.socialLinks) {
+        console.log(`   ${index + 1}. "${post.title}"`)
+        console.log(`      Author: ${post.author.profile.fullName}`)
+        const platforms = Object.keys(post.author.profile.socialLinks)
+        console.log(`      Social: ${platforms.join(', ')}`)
+      }
+    })
+
+    // 7. PERFORMANCE DEMONSTRATION
+    console.log('\n7. Performance Demonstration')
+    console.log('----------------------------')
+
+    // Efficient bulk loading vs N+1 queries
+    console.time('Bulk Loading')
+    const efficientPosts = await Post.query()
+      .load('author', (authorQuery) => {
+        authorQuery.load('profile')
+      })
+      .all()
+    console.timeEnd('Bulk Loading')
+
+    console.log(`✅ Efficiently loaded ${efficientPosts.length} posts with full author data`)
+    console.log('   This prevents N+1 query problems by loading all relationships in bulk')
+
+    // 8. RELATIONSHIP STATISTICS
+    console.log('\n8. Relationship Statistics')
+    console.log('--------------------------')
+
+    const totalUsers = await UserWithReferencedProfile.query().count()
+    const allUsersWithProfiles = await UserWithReferencedProfile.query().load('profile').all()
+    const profileCount = allUsersWithProfiles.filter((u) => u.profile).length
+
+    const totalPosts = await Post.query().count()
+    const publishedPosts = await Post.query().where('status', 'published').count()
+
+    console.log(`✅ Relationship Statistics:`)
+    console.log(`   Total Users: ${totalUsers}`)
+    console.log(`   Users with Profiles: ${profileCount}/${totalUsers}`)
+    console.log(`   Total Posts: ${totalPosts}`)
+    console.log(`   Published Posts: ${publishedPosts}/${totalPosts}`)
+
+    console.log('\n🎉 Lucid-Style Relationships Example Complete!')
+    console.log('==============================================')
+    console.log('✅ Demonstrated HasOne relationships (User -> Profile)')
+    console.log('✅ Demonstrated BelongsTo relationships (Post -> User)')
+    console.log('✅ Showed efficient eager loading with .load()')
+    console.log('✅ Demonstrated nested relationship loading')
+    console.log('✅ Showed conditional and filtered relationship loading')
+    console.log('✅ Highlighted performance benefits of bulk loading')
   } catch (error) {
-    console.error('❌ Error in lucid-style relationships example:', error)
+    console.error('❌ Error in relationships example:', error)
   }
 }
 
-// Export the example function
-export { lucidStyleRelationshipsExample, User, Profile, Post }
+// Export for use in other examples
+export { lucidStyleRelationshipsExample }
 
 // Run the example if this file is executed directly
 if (import.meta.url === `file://${process.argv[1]}`) {
-  lucidStyleRelationshipsExample()
+  lucidStyleRelationshipsExample().catch(console.error)
 }

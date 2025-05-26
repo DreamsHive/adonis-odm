@@ -58,6 +58,7 @@
   },
   "dependencies": {
     "@adonisjs/core": "^6.18.0",
+    "@vinejs/vine": "^3.0.1",
     "luxon": "^3.6.1",
     "mongodb": "^6.16.0",
     "reflect-metadata": "^0.2.2"

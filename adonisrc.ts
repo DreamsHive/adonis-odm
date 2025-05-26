@@ -44,6 +44,7 @@ export default defineConfig({
       file: () => import('@adonisjs/core/providers/repl_provider'),
       environment: ['repl', 'test'],
     },
+    () => import('@adonisjs/core/providers/vinejs_provider'),
   ],
 
   /*

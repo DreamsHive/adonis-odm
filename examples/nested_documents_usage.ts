@@ -1,298 +1,312 @@
-import UserWithEmbeddedProfile from '../app/models/user_with_embedded_profile.js'
-import UserWithReferencedProfile from '../app/models/user_with_referenced_profile.js'
-import Profile from '../app/models/profile.js'
-
 /**
- * Nested Documents Usage Example
+ * NESTED DOCUMENTS USAGE EXAMPLE
  *
- * This example demonstrates different approaches to handle nested documents
- * in MongoDB ODM with AdonisJS v6.
+ * This example demonstrates how to work with nested documents
+ * using the UserWithEmbeddedProfile model which embeds profile
+ * data directly within the user document.
+ *
+ * Key Features Demonstrated:
+ * - Embedded document creation and updates
+ * - Nested field queries and operations
+ * - Type-safe nested document access
+ * - Efficient single-document operations
  */
 
-async function nestedDocumentsExample() {
+import UserWithEmbeddedProfile from '../app/models/user_with_embedded_profile.js'
+
+async function nestedDocumentsUsageExample() {
+  console.log('📄 Nested Documents Usage Example')
+  console.log('==================================\n')
+
   try {
-    console.log('🚀 MongoDB ODM Nested Documents Example')
-    console.log('==========================================')
+    // 1. CREATE USERS WITH EMBEDDED PROFILES
+    console.log('1. Creating Users with Embedded Profiles')
+    console.log('----------------------------------------')
 
-    // ========================================
-    // APPROACH 1: EMBEDDED DOCUMENTS
-    // ========================================
-    console.log('\n📦 APPROACH 1: EMBEDDED DOCUMENTS')
-    console.log('==================================')
-
-    // Create user with embedded profile
-    console.log('\n📝 Creating user with embedded profile...')
-    const userWithEmbedded = await UserWithEmbeddedProfile.create({
-      name: 'John Doe',
-      email: 'john@example.com',
-      age: 30,
+    // Create user with embedded profile data
+    const user1 = await UserWithEmbeddedProfile.create({
+      name: 'Sarah Wilson',
+      email: 'sarah@example.com',
+      age: 29,
       profile: {
-        firstName: 'John',
-        lastName: 'Doe',
-        bio: 'Software developer passionate about MongoDB and AdonisJS',
-        avatar: 'https://example.com/avatar.jpg',
-        phoneNumber: '+1-555-0123',
+        firstName: 'Sarah',
+        lastName: 'Wilson',
+        bio: 'Frontend developer passionate about React and TypeScript',
+        phoneNumber: '+1-555-0201',
         address: {
-          street: '123 Main St',
-          city: 'San Francisco',
-          state: 'CA',
-          zipCode: '94105',
+          street: '789 React Street',
+          city: 'Austin',
+          state: 'TX',
+          zipCode: '73301',
           country: 'USA',
         },
         socialLinks: {
-          twitter: '@johndoe',
-          linkedin: 'linkedin.com/in/johndoe',
-          github: 'github.com/johndoe',
+          twitter: 'https://twitter.com/sarahwilson',
+          linkedin: 'https://linkedin.com/in/sarahwilson',
+          github: 'https://github.com/sarahwilson',
+          website: 'https://sarahwilson.dev',
         },
       },
     })
-    console.log('✅ User with embedded profile created:', {
-      id: userWithEmbedded._id,
-      name: userWithEmbedded.name,
-      fullName: userWithEmbedded.fullName,
-      address: userWithEmbedded.formattedAddress,
-    })
 
-    // Update embedded profile
-    console.log('\n✏️ Updating embedded profile...')
-    userWithEmbedded.updateProfile({
-      bio: 'Senior Software Developer with 5+ years experience',
-      socialLinks: {
-        ...userWithEmbedded.profile?.socialLinks,
-        website: 'https://johndoe.dev',
-      },
-    })
-    await userWithEmbedded.save()
-    console.log('✅ Embedded profile updated')
-
-    // Query users with specific profile data
-    console.log('\n🔍 Querying users by embedded profile data...')
-    const usersInCA = await UserWithEmbeddedProfile.query()
-      .where('profile.address.state', 'CA')
-      .all()
-    console.log('✅ Users in CA found:', usersInCA.length)
-
-    // ========================================
-    // APPROACH 2: REFERENCED DOCUMENTS
-    // ========================================
-    console.log('\n🔗 APPROACH 2: REFERENCED DOCUMENTS')
-    console.log('===================================')
-
-    // Create user with referenced profile
-    console.log('\n📝 Creating user with referenced profile...')
-    const userWithRef = await UserWithReferencedProfile.create({
-      name: 'Jane Smith',
-      email: 'jane@example.com',
-      age: 28,
-    })
-
-    // Create and associate profile
-    const profile = await userWithRef.createProfile({
-      firstName: 'Jane',
-      lastName: 'Smith',
-      bio: 'UX Designer and Frontend Developer',
-      avatar: 'https://example.com/jane-avatar.jpg',
-      phoneNumber: '+1-555-0456',
-      address: {
-        street: '456 Oak Ave',
-        city: 'New York',
-        state: 'NY',
-        zipCode: '10001',
-        country: 'USA',
-      },
-      socialLinks: {
-        twitter: '@janesmith',
-        linkedin: 'linkedin.com/in/janesmith',
-        github: 'github.com/janesmith',
-      },
-    })
-    console.log('✅ User with referenced profile created:', {
-      userId: userWithRef._id,
-      profileId: profile._id,
-      name: userWithRef.name,
-    })
-
-    // Load profile when needed
-    console.log('\n📖 Loading referenced profile...')
-    await userWithRef.loadProfile()
-    console.log('✅ Profile loaded:', {
-      fullName: userWithRef.fullName,
-      address: userWithRef.formattedAddress,
-    })
-
-    // Update referenced profile
-    console.log('\n✏️ Updating referenced profile...')
-    await userWithRef.updateProfile({
-      bio: 'Senior UX Designer specializing in mobile applications',
-      socialLinks: {
-        ...userWithRef.profile?.socialLinks,
-        website: 'https://janesmith.design',
-      },
-    })
-    console.log('✅ Referenced profile updated')
-
-    // ========================================
-    // PERFORMANCE COMPARISON
-    // ========================================
-    console.log('\n⚡ PERFORMANCE COMPARISON')
-    console.log('========================')
-
-    // Simulate loading 100 users with embedded profiles
-    console.log('\n📊 Loading users with embedded profiles (simulated)...')
-    const startEmbedded = Date.now()
-    const embeddedUsers = await UserWithEmbeddedProfile.query()
-      .limit(10) // Simulate loading subset
-      .all()
-    const embeddedTime = Date.now() - startEmbedded
-    console.log(
-      `✅ Loaded ${embeddedUsers.length} users with embedded profiles in ${embeddedTime}ms`
-    )
-    console.log('   - All profile data loaded in single query')
-    console.log('   - No additional database calls needed')
-
-    // Simulate loading 100 users with referenced profiles (without loading profiles)
-    console.log('\n📊 Loading users with referenced profiles (without profiles)...')
-    const startRef = Date.now()
-    const referencedUsers = await UserWithReferencedProfile.query()
-      .limit(10) // Simulate loading subset
-      .all()
-    const refTime = Date.now() - startRef
-    console.log(`✅ Loaded ${referencedUsers.length} users without profiles in ${refTime}ms`)
-    console.log('   - Only user data loaded, profiles not fetched')
-    console.log('   - Profiles can be loaded on-demand')
-
-    // Load profiles for specific users only
-    console.log('\n📊 Loading profiles for specific users only...')
-    const startSpecific = Date.now()
-    for (const user of referencedUsers.slice(0, 3)) {
-      // Load profiles for first 3 users
-      await user.loadProfile()
-    }
-    const specificTime = Date.now() - startSpecific
-    console.log(`✅ Loaded profiles for 3 users in ${specificTime}ms`)
-    console.log('   - Selective loading based on need')
-
-    // ========================================
-    // CRUD OPERATIONS EXAMPLES
-    // ========================================
-    console.log('\n🔧 CRUD OPERATIONS EXAMPLES')
-    console.log('===========================')
-
-    // Embedded approach CRUD
-    console.log('\n📝 Embedded Profile CRUD:')
-
-    // Create with nested data
-    const newEmbeddedUser = await UserWithEmbeddedProfile.create({
-      name: 'Bob Wilson',
-      email: 'bob@example.com',
-      age: 35,
+    const user2 = await UserWithEmbeddedProfile.create({
+      name: 'Mike Chen',
+      email: 'mike@example.com',
+      age: 34,
       profile: {
-        firstName: 'Bob',
-        lastName: 'Wilson',
-        bio: 'DevOps Engineer',
+        firstName: 'Mike',
+        lastName: 'Chen',
+        bio: 'DevOps engineer with expertise in Kubernetes and AWS',
+        phoneNumber: '+1-555-0202',
+        address: {
+          street: '456 Cloud Avenue',
+          city: 'Portland',
+          state: 'OR',
+          zipCode: '97201',
+          country: 'USA',
+        },
+        socialLinks: {
+          linkedin: 'https://linkedin.com/in/mikechen',
+          github: 'https://github.com/mikechen',
+        },
       },
     })
-    console.log('   ✅ Created user with partial profile data')
 
-    // Update nested data
-    newEmbeddedUser.updateProfile({
-      phoneNumber: '+1-555-0789',
-      address: {
-        street: '789 Pine St',
-        city: 'Seattle',
-        state: 'WA',
-        zipCode: '98101',
-        country: 'USA',
-      },
+    console.log(`✅ Created user: ${user1.name}`)
+    console.log(`   Profile: ${user1.profile?.firstName} ${user1.profile?.lastName}`)
+    console.log(`   Bio: ${user1.profile?.bio}`)
+    console.log(`   Phone: ${user1.profile?.phoneNumber}`)
+
+    console.log(`\n✅ Created user: ${user2.name}`)
+    console.log(`   Profile: ${user2.profile?.firstName} ${user2.profile?.lastName}`)
+    console.log(`   Bio: ${user2.profile?.bio}`)
+    console.log(`   Phone: ${user2.profile?.phoneNumber}`)
+
+    // 2. NESTED FIELD QUERIES
+    console.log('\n2. Nested Field Queries')
+    console.log('-----------------------')
+
+    // Query by nested profile fields
+    const frontendDevs = await UserWithEmbeddedProfile.query()
+      .where('profile.bio', 'like', '%Frontend%')
+      .all()
+
+    console.log(`✅ Found ${frontendDevs.length} frontend developers:`)
+    frontendDevs.forEach((user, index) => {
+      console.log(`   ${index + 1}. ${user.name} - ${user.profile?.bio}`)
     })
-    await newEmbeddedUser.save()
-    console.log('   ✅ Updated embedded profile with additional data')
 
-    // Referenced approach CRUD
-    console.log('\n📝 Referenced Profile CRUD:')
+    // Query by nested address
+    const texasUsers = await UserWithEmbeddedProfile.query()
+      .where('profile.address.state', 'TX')
+      .all()
 
-    // Create user first, then profile
-    const newRefUser = await UserWithReferencedProfile.create({
-      name: 'Alice Johnson',
-      email: 'alice@example.com',
-      age: 32,
+    console.log(`\n✅ Found ${texasUsers.length} users in Texas:`)
+    texasUsers.forEach((user, index) => {
+      console.log(
+        `   ${index + 1}. ${user.name} - ${user.profile?.address?.city}, ${user.profile?.address?.state}`
+      )
     })
-    console.log('   ✅ Created user without profile')
 
-    // Add profile later
-    await newRefUser.createProfile({
-      firstName: 'Alice',
-      lastName: 'Johnson',
-      bio: 'Product Manager',
+    // Query by nested phone number
+    const usersWithPhone = await UserWithEmbeddedProfile.query()
+      .whereNotNull('profile.phoneNumber')
+      .all()
+
+    console.log(`\n✅ Found ${usersWithPhone.length} users with phone numbers:`)
+    usersWithPhone.forEach((user, index) => {
+      console.log(`   ${index + 1}. ${user.name} - ${user.profile?.phoneNumber}`)
     })
-    console.log('   ✅ Added profile to existing user')
 
-    // Update profile separately
-    await newRefUser.updateProfile({
-      phoneNumber: '+1-555-0321',
-      bio: 'Senior Product Manager with focus on user experience',
+    // Query by nested social links
+    const usersWithWebsite = await UserWithEmbeddedProfile.query()
+      .whereNotNull('profile.socialLinks.website')
+      .all()
+
+    console.log(`\n✅ Found ${usersWithWebsite.length} users with personal websites:`)
+    usersWithWebsite.forEach((user, index) => {
+      console.log(`   ${index + 1}. ${user.name} - ${user.profile?.socialLinks?.website}`)
     })
-    console.log('   ✅ Updated profile independently')
 
-    // ========================================
-    // QUERYING STRATEGIES
-    // ========================================
-    console.log('\n🔍 QUERYING STRATEGIES')
-    console.log('======================')
+    // 3. NESTED DOCUMENT UPDATES
+    console.log('\n3. Nested Document Updates')
+    console.log('--------------------------')
 
-    // Embedded documents - direct field access
-    console.log('\n📊 Querying embedded documents:')
-    const developersInCA = await UserWithEmbeddedProfile.query()
-      .where('profile.address.state', 'CA')
+    // Update nested profile bio
+    user1.profile!.bio = 'Senior Frontend Developer specializing in React, TypeScript, and Next.js'
+    await user1.save()
+    console.log(`✅ Updated ${user1.name}'s bio`)
+
+    // Update nested address
+    user2.profile!.address!.city = 'Seattle'
+    user2.profile!.address!.zipCode = '98101'
+    await user2.save()
+    console.log(`✅ Updated ${user2.name}'s address to Seattle`)
+
+    // Update nested phone number
+    user1.profile!.phoneNumber = '+1-555-0299'
+    await user1.save()
+    console.log(`✅ Updated ${user1.name}'s phone number`)
+
+    // Add new social link
+    if (!user2.profile!.socialLinks) {
+      user2.profile!.socialLinks = {}
+    }
+    user2.profile!.socialLinks!.twitter = 'https://twitter.com/mikechen'
+    await user2.save()
+    console.log(`✅ Added Twitter link for ${user2.name}`)
+
+    // 4. COMPLEX NESTED QUERIES
+    console.log('\n4. Complex Nested Queries')
+    console.log('-------------------------')
+
+    // Query users with specific social links
+    const twitterUsers = await UserWithEmbeddedProfile.query()
+      .whereNotNull('profile.socialLinks.twitter')
+      .all()
+
+    console.log(`✅ Found ${twitterUsers.length} users with Twitter:`)
+    twitterUsers.forEach((user, index) => {
+      console.log(`   ${index + 1}. ${user.name} - ${user.profile?.socialLinks?.twitter}`)
+    })
+
+    // Query users with multiple social links
+    const multiSocialUsers = await UserWithEmbeddedProfile.query()
+      .whereNotNull('profile.socialLinks.linkedin')
+      .whereNotNull('profile.socialLinks.github')
+      .all()
+
+    console.log(`\n✅ Found ${multiSocialUsers.length} users with LinkedIn and GitHub:`)
+    multiSocialUsers.forEach((user, index) => {
+      const social = user.profile?.socialLinks
+      console.log(
+        `   ${index + 1}. ${user.name} - LinkedIn: ${social?.linkedin}, GitHub: ${social?.github}`
+      )
+    })
+
+    // Query by age range and bio content
+    const youngDevs = await UserWithEmbeddedProfile.query()
+      .where('age', '<', 30)
       .where('profile.bio', 'like', '%developer%')
       .all()
-    console.log(`   ✅ Found ${developersInCA.length} developers in CA`)
 
-    // Referenced documents - need joins or separate queries
-    console.log('\n📊 Querying referenced documents:')
+    console.log(`\n✅ Found ${youngDevs.length} young developers:`)
+    youngDevs.forEach((user, index) => {
+      console.log(`   ${index + 1}. ${user.name} (${user.age}) - ${user.profile?.bio}`)
+    })
 
-    // First, find profiles matching criteria
-    const techProfiles = await Profile.query()
-      .where('bio', 'like', '%engineer%')
-      .orWhere('bio', 'like', '%developer%')
-      .all()
+    // 5. NESTED DOCUMENT AGGREGATION
+    console.log('\n5. Nested Document Aggregation')
+    console.log('------------------------------')
 
-    const techProfileIds = techProfiles.map((p) => p._id)
+    // Get all users and analyze their data
+    const allUsers = await UserWithEmbeddedProfile.query().all()
 
-    // Then find users with those profile IDs
-    const techUsers = await UserWithReferencedProfile.query()
-      .where('profileId', 'in', techProfileIds)
-      .all()
+    // Analyze states
+    const stateStats = allUsers.reduce(
+      (stats, user) => {
+        const state = user.profile?.address?.state || 'unknown'
+        stats[state] = (stats[state] || 0) + 1
+        return stats
+      },
+      {} as Record<string, number>
+    )
 
-    console.log(`   ✅ Found ${techUsers.length} tech users through profile lookup`)
+    console.log(`✅ Users by state:`)
+    Object.entries(stateStats).forEach(([state, count]) => {
+      console.log(`   ${state}: ${count} users`)
+    })
 
-    console.log('\n🎉 Nested documents example completed successfully!')
+    // Analyze social link usage
+    const socialStats = allUsers.reduce(
+      (stats, user) => {
+        const social = user.profile?.socialLinks
+        if (social?.twitter) stats.twitter = (stats.twitter || 0) + 1
+        if (social?.linkedin) stats.linkedin = (stats.linkedin || 0) + 1
+        if (social?.github) stats.github = (stats.github || 0) + 1
+        if (social?.website) stats.website = (stats.website || 0) + 1
+        return stats
+      },
+      {} as Record<string, number>
+    )
 
-    // ========================================
-    // RECOMMENDATIONS
-    // ========================================
-    console.log('\n💡 RECOMMENDATIONS')
-    console.log('==================')
-    console.log('📦 Use EMBEDDED documents when:')
-    console.log('   - Profile data is always loaded with user')
-    console.log('   - Profile data is relatively small')
-    console.log('   - You need atomic updates')
-    console.log('   - You frequently query by profile fields')
+    console.log(`\n✅ Social link usage:`)
+    Object.entries(socialStats).forEach(([platform, count]) => {
+      console.log(`   ${platform}: ${count} users`)
+    })
 
-    console.log('\n🔗 Use REFERENCED documents when:')
-    console.log('   - Profile data is large or complex')
-    console.log('   - Profile data is optional/loaded on-demand')
-    console.log('   - You need to query profiles independently')
-    console.log('   - Multiple entities might reference the same profile')
+    // Analyze bio keywords
+    const bioKeywords = allUsers.reduce(
+      (keywords, user) => {
+        const bio = user.profile?.bio?.toLowerCase() || ''
+        if (bio.includes('frontend')) keywords.frontend = (keywords.frontend || 0) + 1
+        if (bio.includes('backend')) keywords.backend = (keywords.backend || 0) + 1
+        if (bio.includes('devops')) keywords.devops = (keywords.devops || 0) + 1
+        if (bio.includes('developer')) keywords.developer = (keywords.developer || 0) + 1
+        if (bio.includes('engineer')) keywords.engineer = (keywords.engineer || 0) + 1
+        return keywords
+      },
+      {} as Record<string, number>
+    )
+
+    console.log(`\n✅ Bio keywords:`)
+    Object.entries(bioKeywords).forEach(([keyword, count]) => {
+      console.log(`   ${keyword}: ${count} users`)
+    })
+
+    // 6. PARTIAL NESTED UPDATES
+    console.log('\n6. Partial Nested Updates')
+    console.log('-------------------------')
+
+    // Update only specific nested fields using updateProfile method
+    user1.updateProfile({
+      bio: 'Lead Frontend Developer and React Expert',
+      avatar: 'https://example.com/sarah-avatar.jpg',
+    })
+    await user1.save()
+
+    console.log(`✅ Updated ${user1.name}'s bio and avatar`)
+
+    // Verify the update
+    const updatedUser = await UserWithEmbeddedProfile.find(user1._id)
+    console.log(`   New bio: ${updatedUser?.profile?.bio}`)
+    console.log(`   New avatar: ${updatedUser?.profile?.avatar}`)
+
+    // 7. NESTED DOCUMENT BENEFITS
+    console.log('\n7. Nested Document Benefits')
+    console.log('---------------------------')
+
+    console.log(`✅ Benefits of embedded profiles:`)
+    console.log(`   • Single document read/write operations`)
+    console.log(`   • Atomic updates for user and profile data`)
+    console.log(`   • No need for joins or separate queries`)
+    console.log(`   • Consistent data (no orphaned profiles)`)
+    console.log(`   • Better performance for read-heavy workloads`)
+
+    console.log(`\n✅ Use cases for embedded documents:`)
+    console.log(`   • User profiles and preferences`)
+    console.log(`   • Product details and specifications`)
+    console.log(`   • Order items and line details`)
+    console.log(`   • Blog posts with metadata`)
+    console.log(`   • Any 1:1 or 1:few relationships`)
+
+    console.log('\n🎉 Nested Documents Usage Example Complete!')
+    console.log('===========================================')
+    console.log('✅ Created users with complex embedded profiles')
+    console.log('✅ Demonstrated nested field queries')
+    console.log('✅ Showed nested document updates')
+    console.log('✅ Performed complex nested queries')
+    console.log('✅ Analyzed nested document data')
+    console.log('✅ Highlighted benefits of embedded documents')
   } catch (error) {
-    console.error('❌ Error in nested documents example:', error.message)
+    console.error('❌ Error in nested documents example:', error)
   }
 }
 
-// Export the example function
-export { nestedDocumentsExample }
+// Export for use in other examples
+export { nestedDocumentsUsageExample }
 
 // Run the example if this file is executed directly
 if (import.meta.url === `file://${process.argv[1]}`) {
-  nestedDocumentsExample()
+  nestedDocumentsUsageExample().catch(console.error)
 }

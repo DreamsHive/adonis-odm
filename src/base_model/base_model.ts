@@ -3,11 +3,27 @@ import { ObjectId, WithId, Document } from 'mongodb'
 import { ModelQueryBuilder } from '../query_builder/model_query_builder.js'
 import { ModelMetadata, DateColumnOptions } from '../types/index.js'
 import { ModelNotFoundException } from '../exceptions/index.js'
+import type { ComputedProperty } from '../decorators/column.js'
 import {
-  createHasOneProxy,
-  createHasManyProxy,
-  createBelongsToProxy,
-} from '../relationships/relationship_proxies.js'
+  CamelCaseNamingStrategy,
+  type NamingStrategyContract,
+} from '../naming_strategy/naming_strategy.js'
+
+/**
+ * Type for create method attributes - includes all properties except methods, relationships, and BaseModel internals
+ * Following AdonisJS Lucid pattern: computed properties and all data types are included
+ */
+type CreateAttributes<T extends BaseModel> = {
+  [K in keyof T as T[K] extends (...args: any[]) => any
+    ? never
+    : K extends keyof BaseModel
+      ? never
+      : K extends '_id'
+        ? never
+        : T[K] extends { load: (...args: any[]) => any } // Exclude relationship proxies
+          ? never
+          : K]?: T[K]
+}
 
 /**
  * Symbol to store model metadata
@@ -15,9 +31,42 @@ import {
 export const MODEL_METADATA = Symbol('model_metadata')
 
 /**
+ * Global model registry for relationship loading
+ */
+class ModelRegistry {
+  private static models: Map<string, typeof BaseModel> = new Map()
+
+  static register(modelClass: typeof BaseModel): void {
+    this.models.set(modelClass.name, modelClass)
+  }
+
+  static get(modelName: string): typeof BaseModel | undefined {
+    return this.models.get(modelName)
+  }
+
+  static has(modelName: string): boolean {
+    return this.models.has(modelName)
+  }
+
+  static clear(): void {
+    this.models.clear()
+  }
+
+  static getAll(): Map<string, typeof BaseModel> {
+    return new Map(this.models)
+  }
+}
+
+/**
  * Base Model class for MongoDB ODM
  */
 export class BaseModel {
+  /**
+   * Naming strategy for the model
+   * Defaults to CamelCaseNamingStrategy which converts camelCase to snake_case for serialization
+   */
+  public static namingStrategy: NamingStrategyContract = new CamelCaseNamingStrategy()
+
   /**
    * Indicates if the model instance exists in the database
    */
@@ -46,8 +95,10 @@ export class BaseModel {
   constructor(attributes: Record<string, any> = {}) {
     this.fill(attributes)
     this.applyTimestamps() // Apply auto-create timestamps for new models
-    this.syncOriginal()
     this.initializeRelationshipProxies()
+
+    // Auto-register the model class in the registry
+    ModelRegistry.register(this.constructor as typeof BaseModel)
   }
 
   /**
@@ -62,6 +113,41 @@ export class BaseModel {
       }
     }
     return (this as any)[MODEL_METADATA]
+  }
+
+  /**
+   * Register a model in the global registry
+   */
+  static register(): void {
+    ModelRegistry.register(this)
+  }
+
+  /**
+   * Get a model class from the registry
+   */
+  static getModelClass(modelName: string): typeof BaseModel | undefined {
+    return ModelRegistry.get(modelName)
+  }
+
+  /**
+   * Check if a model is registered
+   */
+  static hasModelClass(modelName: string): boolean {
+    return ModelRegistry.has(modelName)
+  }
+
+  /**
+   * Get all registered models
+   */
+  static getAllModels(): Map<string, typeof BaseModel> {
+    return ModelRegistry.getAll()
+  }
+
+  /**
+   * Clear the model registry (useful for testing)
+   */
+  static clearRegistry(): void {
+    ModelRegistry.clear()
   }
 
   /**
@@ -80,8 +166,37 @@ export class BaseModel {
       .toLowerCase()
       .replace(/^_/, '')
 
-    // Simple pluralization (add 's')
-    return snakeCase + 's'
+    // Better pluralization logic
+    // Handle common patterns like "User" -> "users", "UserWithProfile" -> "users_with_profiles"
+    const words = snakeCase.split('_')
+
+    // Helper function to pluralize a word
+    const pluralize = (word: string): string => {
+      if (word.endsWith('y')) {
+        return word.slice(0, -1) + 'ies'
+      } else if (
+        word.endsWith('s') ||
+        word.endsWith('sh') ||
+        word.endsWith('ch') ||
+        word.endsWith('x') ||
+        word.endsWith('z')
+      ) {
+        return word + 'es'
+      } else {
+        return word + 's'
+      }
+    }
+
+    // For compound names like "UserWithReferencedProfile", pluralize both first and last words
+    // This handles cases like "UserProfile" -> "users_profiles" and "UserWithReferencedProfile" -> "users_with_referenced_profiles"
+    if (words.length > 1) {
+      words[0] = pluralize(words[0]) // Pluralize first word (main entity)
+      words[words.length - 1] = pluralize(words[words.length - 1]) // Pluralize last word
+    } else {
+      words[0] = pluralize(words[0]) // Single word, just pluralize it
+    }
+
+    return words.join('_')
   }
 
   /**
@@ -92,9 +207,11 @@ export class BaseModel {
   }
 
   /**
-   * Create a new query builder instance
+   * Create a new query builder instance with type-safe relationship loading
    */
-  static query(): ModelQueryBuilder<Document> {
+  static query<T extends BaseModel = BaseModel>(
+    this: typeof BaseModel & (new (...args: any[]) => T)
+  ): ModelQueryBuilder<Document, T> {
     // This would be injected by the service provider
     // For now, we'll throw an error to indicate it needs to be set up
     throw new Error('Database connection not configured. Please register the MongoDB ODM provider.')
@@ -205,8 +322,8 @@ export class BaseModel {
    * Create a new document
    */
   static async create<T extends BaseModel>(
-    this: typeof BaseModel & (new (...args: any[]) => T),
-    attributes: Record<string, any>
+    this: new (...args: any[]) => T,
+    attributes: CreateAttributes<T>
   ): Promise<T> {
     const instance = new this(attributes)
     await instance.save()
@@ -217,8 +334,8 @@ export class BaseModel {
    * Create multiple documents
    */
   static async createMany<T extends BaseModel>(
-    this: typeof BaseModel & (new (...args: any[]) => T),
-    attributesArray: Record<string, any>[]
+    this: new (...args: any[]) => T,
+    attributesArray: CreateAttributes<T>[]
   ): Promise<T[]> {
     const instances = attributesArray.map((attributes) => new this(attributes))
 
@@ -234,9 +351,9 @@ export class BaseModel {
    * Update or create a document
    */
   static async updateOrCreate<T extends BaseModel>(
-    this: typeof BaseModel & (new (...args: any[]) => T),
-    searchPayload: Record<string, any>,
-    persistencePayload: Record<string, any>
+    this: new (...args: any[]) => T,
+    searchPayload: CreateAttributes<T>,
+    persistencePayload: CreateAttributes<T>
   ): Promise<T> {
     let query = (this as any).query()
 
@@ -269,8 +386,8 @@ export class BaseModel {
       const metadata = (this.constructor as typeof BaseModel).getMetadata()
       const columnOptions = metadata.columns.get(key)
 
-      // Skip reference fields (virtual properties) during fill
-      if (columnOptions?.isReference) {
+      // Skip reference fields (virtual properties) and computed properties during fill
+      if (columnOptions?.isReference || columnOptions?.isComputed) {
         continue
       }
 
@@ -280,7 +397,7 @@ export class BaseModel {
       }
 
       // If this is a column with a property descriptor, use the private key
-      if (columnOptions && !columnOptions.isReference) {
+      if (columnOptions && !columnOptions.isReference && !columnOptions.isComputed) {
         const privateKey = `_${key}`
         ;(this as any)[privateKey] = processedValue
       } else {
@@ -298,8 +415,8 @@ export class BaseModel {
       const metadata = (this.constructor as typeof BaseModel).getMetadata()
       const columnOptions = metadata.columns.get(key)
 
-      // Skip reference fields (virtual properties)
-      if (columnOptions?.isReference) {
+      // Skip reference fields (virtual properties) and computed properties
+      if (columnOptions?.isReference || columnOptions?.isComputed) {
         continue
       }
 
@@ -382,8 +499,8 @@ export class BaseModel {
     const metadata = (this.constructor as typeof BaseModel).getMetadata()
     const columnOptions = metadata.columns.get(key)
 
-    // Skip setting reference fields (virtual properties) - they have getters only
-    if (columnOptions?.isReference) {
+    // Skip setting reference fields (virtual properties) and computed properties - they have getters only
+    if (columnOptions?.isReference || columnOptions?.isComputed) {
       return
     }
 
@@ -425,12 +542,29 @@ export class BaseModel {
 
   /**
    * Hydrate the model from a MongoDB document
+   * Handles conversion from database column names (snake_case) back to model properties (camelCase)
    */
   hydrateFromDocument(document: WithId<Document>): void {
     const metadata = (this.constructor as typeof BaseModel).getMetadata()
+    const namingStrategy = (this.constructor as typeof BaseModel).namingStrategy
 
-    for (const [key, value] of Object.entries(document)) {
-      const columnOptions = metadata.columns.get(key)
+    // Create a reverse mapping from database column names to property names
+    const columnToPropertyMap = new Map<string, string>()
+    for (const [propertyName] of metadata.columns) {
+      const columnName =
+        propertyName === '_id' ? '_id' : namingStrategy.columnName(this.constructor, propertyName)
+      columnToPropertyMap.set(columnName, propertyName)
+    }
+
+    for (const [dbColumnName, value] of Object.entries(document)) {
+      // Skip MongoDB's auto-generated 'id' property to avoid duplication with '_id'
+      if (dbColumnName === 'id') {
+        continue
+      }
+
+      // Try to find the corresponding property name
+      const propertyName = columnToPropertyMap.get(dbColumnName) || dbColumnName
+      const columnOptions = metadata.columns.get(propertyName)
 
       let processedValue = value
       if (columnOptions?.deserialize) {
@@ -438,14 +572,15 @@ export class BaseModel {
       }
 
       // Special handling for _id field - always set it directly
-      if (key === '_id') {
+      if (dbColumnName === '_id') {
         this._id = processedValue
       } else if (columnOptions && !columnOptions.isReference) {
         // If this is a column with a property descriptor, use the private key
-        const privateKey = `_${key}`
+        const privateKey = `_${propertyName}`
         ;(this as any)[privateKey] = processedValue
       } else {
-        ;(this as any)[key] = processedValue
+        // For properties without metadata, use the property name (could be camelCase or snake_case)
+        ;(this as any)[propertyName] = processedValue
       }
     }
 
@@ -456,27 +591,33 @@ export class BaseModel {
 
   /**
    * Convert the model to a plain object for database storage
+   * Following AdonisJS Lucid naming strategy (camelCase -> snake_case by default)
    */
   toDocument(): Record<string, any> {
     const metadata = (this.constructor as typeof BaseModel).getMetadata()
+    const namingStrategy = (this.constructor as typeof BaseModel).namingStrategy
     const document: Record<string, any> = {}
 
     // Process all columns defined in metadata
     for (const [key] of metadata.columns) {
       const columnOptions = metadata.columns.get(key)
 
-      // Skip reference fields (virtual properties) - they should not be serialized to database
-      if (columnOptions?.isReference) {
+      // Skip reference fields (virtual properties) and computed properties - they should not be serialized to database
+      if (columnOptions?.isReference || columnOptions?.isComputed) {
         continue
       }
 
       const value = this.getAttribute(key)
 
       if (value !== undefined) {
+        // Use naming strategy to convert property name to database column name
+        // Special handling for _id to keep it as _id (MongoDB convention)
+        const columnName = key === '_id' ? '_id' : namingStrategy.columnName(this.constructor, key)
+
         if (columnOptions?.serialize) {
-          document[key] = columnOptions.serialize(value)
+          document[columnName] = columnOptions.serialize(value)
         } else {
-          document[key] = value
+          document[columnName] = value
         }
       }
     }
@@ -498,17 +639,21 @@ export class BaseModel {
 
       const columnOptions = metadata.columns.get(key)
 
-      // Skip reference fields (virtual properties) - they should not be serialized to database
-      if (columnOptions?.isReference) {
+      // Skip reference fields (virtual properties) and computed properties - they should not be serialized to database
+      if (columnOptions?.isReference || columnOptions?.isComputed) {
         continue
       }
 
       const value = this.getAttribute(key)
       if (value !== undefined) {
+        // Use naming strategy to convert property name to database column name
+        // Special handling for _id to keep it as _id (MongoDB convention)
+        const columnName = key === '_id' ? '_id' : namingStrategy.columnName(this.constructor, key)
+
         if (columnOptions?.serialize) {
-          document[key] = columnOptions.serialize(value)
+          document[columnName] = columnOptions.serialize(value)
         } else {
-          document[key] = value
+          document[columnName] = value
         }
       }
     }
@@ -519,6 +664,162 @@ export class BaseModel {
     }
 
     return document
+  }
+
+  /**
+   * Convert the model to a plain object for JSON serialization (API responses)
+   * This includes computed properties and properly serializes relationships
+   * Following AdonisJS Lucid naming strategy (camelCase -> snake_case by default)
+   */
+  toJSON(): Record<string, any> {
+    const metadata = (this.constructor as typeof BaseModel).getMetadata()
+    const namingStrategy = (this.constructor as typeof BaseModel).namingStrategy
+    const json: Record<string, any> = {}
+
+    // Process all columns defined in metadata
+    for (const [key] of metadata.columns) {
+      const columnOptions = metadata.columns.get(key)
+
+      // Skip reference fields that are not loaded
+      if (columnOptions?.isReference) {
+        const relationshipValue = this.getAttribute(key)
+        if (relationshipValue && typeof relationshipValue === 'object') {
+          // Check if it's a relationship proxy with loaded data
+          if (relationshipValue.isLoaded) {
+            const relatedData = relationshipValue.related
+            if (relatedData) {
+              // Handle serializeAs option - if explicitly set, use it; otherwise use naming strategy
+              let serializeKey: string | null
+              if (columnOptions.serializeAs !== undefined) {
+                serializeKey = columnOptions.serializeAs
+              } else {
+                serializeKey = namingStrategy.serializedName(this.constructor, key)
+              }
+
+              if (serializeKey !== null) {
+                if (Array.isArray(relatedData)) {
+                  json[serializeKey] = relatedData.map((item: any) =>
+                    item && typeof item.toJSON === 'function' ? item.toJSON() : item
+                  )
+                } else {
+                  json[serializeKey] =
+                    relatedData && typeof relatedData.toJSON === 'function'
+                      ? relatedData.toJSON()
+                      : relatedData
+                }
+              }
+            }
+          }
+        }
+        continue
+      }
+
+      // Include computed properties in JSON serialization
+      const value = this.getAttribute(key)
+      if (value !== undefined) {
+        // Handle serializeAs option - if explicitly set, use it; otherwise use naming strategy
+        let serializeKey: string | null
+        if (columnOptions?.serializeAs !== undefined) {
+          serializeKey = columnOptions.serializeAs
+        } else {
+          serializeKey = namingStrategy.serializedName(this.constructor, key)
+        }
+
+        if (serializeKey !== null) {
+          if (columnOptions?.serialize) {
+            json[serializeKey] = columnOptions.serialize(value)
+          } else {
+            json[serializeKey] = this.serializeValueForJSON(value, key)
+          }
+        }
+      }
+    }
+
+    // Also include any additional properties that might not be in metadata
+    const allProperties = Object.getOwnPropertyNames(this).concat(Object.keys(this))
+    const uniqueProperties = [...new Set(allProperties)]
+
+    for (const key of uniqueProperties) {
+      // Skip internal properties and private keys
+      if (key.startsWith('$') || (key.startsWith('_') && key !== '_id')) {
+        continue
+      }
+
+      // Skip MongoDB's auto-generated 'id' property to avoid duplication with '_id'
+      if (key === 'id') {
+        continue
+      }
+
+      // Skip if already processed
+      if (json.hasOwnProperty(key)) {
+        continue
+      }
+
+      const columnOptions = metadata.columns.get(key)
+
+      // Skip reference fields (already handled above)
+      if (columnOptions?.isReference) {
+        continue
+      }
+
+      const value = this.getAttribute(key)
+      if (value !== undefined) {
+        // Handle serializeAs option - if explicitly set, use it; otherwise use naming strategy
+        let serializeKey: string | null
+        if (columnOptions?.serializeAs !== undefined) {
+          serializeKey = columnOptions.serializeAs
+        } else {
+          serializeKey = namingStrategy.serializedName(this.constructor, key)
+        }
+
+        if (serializeKey !== null) {
+          if (columnOptions?.serialize) {
+            json[serializeKey] = columnOptions.serialize(value)
+          } else {
+            json[serializeKey] = this.serializeValueForJSON(value, key)
+          }
+        }
+      }
+    }
+
+    // Always include _id if it exists (keep as _id since it's MongoDB convention)
+    if (this._id) {
+      json._id = this._id
+    }
+
+    // Remove any 'id' property that might have been added by MongoDB driver
+    delete json.id
+
+    return json
+  }
+
+  /**
+   * Serialize a value for JSON output (API responses)
+   */
+  private serializeValueForJSON(value: any, key: string): any {
+    const metadata = (this.constructor as typeof BaseModel).getMetadata()
+    const columnOptions = metadata.columns.get(key)
+
+    if (columnOptions?.serialize && typeof columnOptions.serialize === 'function') {
+      return columnOptions.serialize(value)
+    }
+
+    // Handle DateTime serialization for JSON (ISO string format)
+    if (value && typeof value === 'object' && value.constructor.name === 'DateTime') {
+      return value.toISO()
+    }
+
+    // Handle Date serialization for JSON
+    if (value instanceof Date) {
+      return value.toISOString()
+    }
+
+    // Handle ObjectId serialization for JSON
+    if (value && typeof value === 'object' && value.constructor.name === 'ObjectId') {
+      return value.toString()
+    }
+
+    return value
   }
 
   /**
@@ -578,10 +879,12 @@ export class BaseModel {
 
   /**
    * Get dirty attributes for the model
+   * Returns attributes with database column names (snake_case) for database operations
    */
   public getDirtyAttributes(): Record<string, any> {
     const dirty: Record<string, any> = {}
     const metadata = (this.constructor as typeof BaseModel).getMetadata()
+    const namingStrategy = (this.constructor as typeof BaseModel).namingStrategy
 
     for (const [key, value] of Object.entries(this.$dirty)) {
       // Skip internal properties
@@ -591,16 +894,20 @@ export class BaseModel {
 
       const columnOptions = metadata.columns.get(key)
 
-      // Skip reference fields (virtual properties) from dirty attributes
-      if (columnOptions?.isReference) {
+      // Skip reference fields (virtual properties) and computed properties from dirty attributes
+      if (columnOptions?.isReference || columnOptions?.isComputed) {
         continue
       }
 
+      // Use naming strategy to convert property name to database column name
+      // Special handling for _id to keep it as _id (MongoDB convention)
+      const columnName = key === '_id' ? '_id' : namingStrategy.columnName(this.constructor, key)
+
       // Serialize the value if needed
       if (columnOptions?.serialize && typeof columnOptions.serialize === 'function') {
-        dirty[key] = columnOptions.serialize(value)
+        dirty[columnName] = columnOptions.serialize(value)
       } else {
-        dirty[key] = this.serializeValue(value, key)
+        dirty[columnName] = this.serializeValue(value, key)
       }
     }
 

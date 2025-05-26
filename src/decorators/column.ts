@@ -49,8 +49,8 @@ export function column(options: ColumnOptions = {}) {
 
         this[privateKey] = value
 
-        // Track dirty attributes if the model is persisted and value changed
-        if (this.$isPersisted && oldValue !== value) {
+        // Track dirty attributes if value changed
+        if (oldValue !== value) {
           this.$dirty[propertyKey] = value
         }
       },
@@ -68,7 +68,14 @@ column.date = function (options: DateColumnOptions = {}) {
     const metadata = getMetadata(target)
     const columnOptions: ColumnOptions = {
       ...options,
-      serialize: options.serialize || ((value: DateTime) => value?.toJSDate()),
+      serialize:
+        options.serialize ||
+        ((value: DateTime) => {
+          if (value && typeof value === 'object' && value.constructor.name === 'DateTime') {
+            return value.toJSDate()
+          }
+          return value
+        }),
       deserialize:
         options.deserialize || ((value: Date) => (value ? DateTime.fromJSDate(value) : value)),
     }
@@ -94,8 +101,8 @@ column.date = function (options: DateColumnOptions = {}) {
 
         this[privateKey] = value
 
-        // Track dirty attributes if the model is persisted and value changed
-        if (this.$isPersisted && oldValue !== value) {
+        // Track dirty attributes if value changed
+        if (oldValue !== value) {
           this.$dirty[propertyKey] = value
         }
       },
@@ -113,7 +120,14 @@ column.dateTime = function (options: DateColumnOptions = {}) {
     const metadata = getMetadata(target)
     const columnOptions: ColumnOptions = {
       ...options,
-      serialize: options.serialize || ((value: DateTime) => value?.toJSDate()),
+      serialize:
+        options.serialize ||
+        ((value: DateTime) => {
+          if (value && typeof value === 'object' && value.constructor.name === 'DateTime') {
+            return value.toJSDate()
+          }
+          return value
+        }),
       deserialize:
         options.deserialize ||
         ((value: any) => {
@@ -151,8 +165,8 @@ column.dateTime = function (options: DateColumnOptions = {}) {
 
         this[privateKey] = value
 
-        // Track dirty attributes if the model is persisted and value changed
-        if (this.$isPersisted && oldValue !== value) {
+        // Track dirty attributes if value changed
+        if (oldValue !== value) {
           this.$dirty[propertyKey] = value
         }
       },
@@ -190,14 +204,49 @@ column.embedded = function (options: ColumnOptions = {}) {
 
         this[privateKey] = value
 
-        // Track dirty attributes if the model is persisted and value changed
-        if (this.$isPersisted && oldValue !== value) {
+        // Track dirty attributes if value changed
+        if (oldValue !== value) {
           this.$dirty[propertyKey] = value
         }
       },
       configurable: true,
       enumerable: true,
     })
+  }
+}
+
+/**
+ * Brand type to mark computed properties at the type level
+ */
+declare const ComputedBrand: unique symbol
+export type ComputedProperty<T = any> = T & { readonly [ComputedBrand]: true }
+
+/**
+ * Computed property decorator - marks properties as computed (getter-only)
+ * Similar to AdonisJS Lucid's @computed decorator
+ * These properties are excluded from create/update operations but included in serialization
+ */
+export function computed(options: { serializeAs?: string | null } = {}) {
+  return function (target: any, propertyKey: string, descriptor?: PropertyDescriptor) {
+    const metadata = getMetadata(target)
+    const columnOptions: ColumnOptions = {
+      isComputed: true,
+      serializeAs: options.serializeAs,
+    }
+    metadata.columns.set(propertyKey, columnOptions)
+
+    // Enhance the descriptor to brand the return type for TypeScript
+    if (descriptor && descriptor.get) {
+      const originalGetter = descriptor.get
+      descriptor.get = function (this: any) {
+        const result = originalGetter.call(this)
+        // Brand the result as ComputedProperty for TypeScript type checking
+        return result as ComputedProperty
+      }
+      return descriptor
+    }
+
+    return descriptor
   }
 }
 
@@ -219,13 +268,10 @@ export function hasOne(
   return function (target: any, propertyKey: string) {
     const metadata = getMetadata(target)
 
-    // Get the related model
-    const RelatedModel = relatedModel()
-    const relatedMetadata = RelatedModel.getMetadata()
-
+    // Defer model resolution to avoid circular dependency issues
     const columnOptions: ColumnOptions = {
       isReference: true,
-      model: RelatedModel.name,
+      model: 'deferred', // Will be resolved later
       localKey: options.localKey || metadata.primaryKey || 'id', // Default to this model's primary key
       foreignKey: options.foreignKey || `${target.constructor.name.toLowerCase()}Id`, // Default foreign key
     }
@@ -238,13 +284,16 @@ export function hasOne(
         // Check if the proxy is already initialized
         const proxyKey = `_${propertyKey}_proxy`
         if (!this[proxyKey]) {
-          this[proxyKey] = createHasOneProxy(
-            this,
-            propertyKey,
-            RelatedModel,
-            columnOptions.localKey!,
-            columnOptions.foreignKey!
-          )
+          // Resolve the model lazily when first accessed
+          const RelatedModel = relatedModel()
+
+          // Update the column options with the actual model name
+          columnOptions.model = RelatedModel.name
+
+          this[proxyKey] = createHasOneProxy(relatedModel, {
+            localKey: columnOptions.localKey!,
+            foreignKey: columnOptions.foreignKey!,
+          })
         }
         return this[proxyKey]
       },
@@ -268,12 +317,10 @@ export function hasMany(
   return function (target: any, propertyKey: string) {
     const metadata = getMetadata(target)
 
-    // Get the related model
-    const RelatedModel = relatedModel()
-
+    // Defer model resolution to avoid circular dependency issues
     const columnOptions: ColumnOptions = {
       isReference: true,
-      model: RelatedModel.name,
+      model: 'deferred', // Will be resolved later
       localKey: options.localKey || metadata.primaryKey || 'id', // Default to this model's primary key
       foreignKey: options.foreignKey || `${target.constructor.name.toLowerCase()}Id`, // Default foreign key
       isArray: true, // Indicates this is a one-to-many relationship
@@ -287,13 +334,16 @@ export function hasMany(
         // Check if the proxy is already initialized
         const proxyKey = `_${propertyKey}_proxy`
         if (!this[proxyKey]) {
-          this[proxyKey] = createHasManyProxy(
-            this,
-            propertyKey,
-            RelatedModel,
-            columnOptions.localKey!,
-            columnOptions.foreignKey!
-          )
+          // Resolve the model lazily when first accessed
+          const RelatedModel = relatedModel()
+
+          // Update the column options with the actual model name
+          columnOptions.model = RelatedModel.name
+
+          this[proxyKey] = createHasManyProxy(relatedModel, {
+            localKey: columnOptions.localKey!,
+            foreignKey: columnOptions.foreignKey!,
+          })
         }
         return this[proxyKey]
       },
@@ -317,15 +367,12 @@ export function belongsTo(
   return function (target: any, propertyKey: string) {
     const metadata = getMetadata(target)
 
-    // Get the related model
-    const RelatedModel = relatedModel()
-    const relatedMetadata = RelatedModel.getMetadata()
-
+    // Defer model resolution to avoid circular dependency issues
     const columnOptions: ColumnOptions = {
       isReference: true,
-      model: RelatedModel.name,
-      localKey: options.localKey || `${RelatedModel.name.toLowerCase()}Id`, // Foreign key on this model
-      foreignKey: options.foreignKey || relatedMetadata.primaryKey || 'id', // Primary key on related model
+      model: 'deferred', // Will be resolved later
+      localKey: options.localKey, // Will be set later when model is resolved
+      foreignKey: options.foreignKey, // Will be set later when model is resolved
       isBelongsTo: true, // Indicates this is a belongs-to relationship
     }
 
@@ -337,13 +384,19 @@ export function belongsTo(
         // Check if the proxy is already initialized
         const proxyKey = `_${propertyKey}_proxy`
         if (!this[proxyKey]) {
-          this[proxyKey] = createBelongsToProxy(
-            this,
-            propertyKey,
-            RelatedModel,
-            columnOptions.localKey!,
-            columnOptions.foreignKey!
-          )
+          // Resolve the model lazily when first accessed
+          const RelatedModel = relatedModel()
+          const relatedMetadata = RelatedModel.getMetadata()
+
+          // Update the column options with the actual model info
+          columnOptions.model = RelatedModel.name
+          columnOptions.localKey = columnOptions.localKey || `${RelatedModel.name.toLowerCase()}Id`
+          columnOptions.foreignKey = columnOptions.foreignKey || relatedMetadata.primaryKey || 'id'
+
+          this[proxyKey] = createBelongsToProxy(relatedModel, {
+            localKey: columnOptions.localKey!,
+            foreignKey: columnOptions.foreignKey!,
+          })
         }
         return this[proxyKey]
       },

@@ -17,7 +17,20 @@ export default class MongodbProvider {
    */
   register() {
     // Create the database manager instance
-    const config = this.app.config.get<MongoConfig>('mongo')
+    const config = this.app.config.get<MongoConfig>('mongodb')
+
+    if (!config) {
+      throw new Error(
+        'MongoDB configuration not found. Please ensure config/mongodb.ts is properly configured.'
+      )
+    }
+
+    if (!config.connections) {
+      throw new Error(
+        'MongoDB connections not configured. Please check your config/mongodb.ts file.'
+      )
+    }
+
     this.manager = new MongoDatabaseManager(config)
 
     // Store it in the container using bind with any type
@@ -38,7 +51,7 @@ export default class MongodbProvider {
    */
   async start() {
     // Connect to MongoDB when the application starts
-    if (this.app.getEnvironment() !== 'test' && this.manager) {
+    if (this.manager) {
       await this.manager.connect()
     }
   }

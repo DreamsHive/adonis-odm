@@ -10,11 +10,13 @@ export interface ColumnOptions {
   deserialize?: (value: any) => any
   isEmbedded?: boolean
   isReference?: boolean
+  isComputed?: boolean
   model?: string
   localKey?: string
   foreignKey?: string
   isArray?: boolean
   isBelongsTo?: boolean
+  serializeAs?: string | null
 }
 
 /**

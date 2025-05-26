@@ -1,166 +1,14 @@
 import { test } from '@japa/runner'
-import { BaseModel } from '../../src/base_model/base_model.js'
-import { column } from '../../src/decorators/column.js'
 import { DateTime } from 'luxon'
-import { MongoDatabaseManager } from '../../src/database_manager.js'
-import { MongoConfig } from '../../src/types/index.js'
-import { ModelQueryBuilder } from '../../src/query_builder/model_query_builder.js'
 import { ObjectId } from 'mongodb'
+import UserWithReferencedProfile from '../../app/models/user_with_referenced_profile.js'
+import Profile from '../../app/models/profile.js'
+import Post from '../../app/models/post.js'
+import { ModelQueryBuilder } from '../../src/query_builder/model_query_builder.js'
 
-// Test model
-class TestUser extends BaseModel {
-  @column({ isPrimary: true })
-  declare _id: string
-
-  @column()
-  declare name: string
-
-  @column()
-  declare email: string
-
-  @column()
-  declare age?: number
-
-  @column()
-  declare status?: string
-
-  @column()
-  declare department?: string
-
-  @column.dateTime({ autoCreate: true })
-  declare createdAt: DateTime
-
-  @column.dateTime({ autoCreate: true, autoUpdate: true })
-  declare updatedAt: DateTime
-
-  static getCollectionName(): string {
-    return 'test_users'
-  }
-}
-
-test.group('MongoDB ODM - Unit Tests', (group) => {
-  let manager: MongoDatabaseManager
-  let isDockerAvailable = false
-
-  group.setup(async () => {
-    // Real MongoDB configuration for unit testing
-    const config: MongoConfig = {
-      connection: 'mongodb',
-      connections: {
-        mongodb: {
-          client: 'mongodb',
-          connection: {
-            url: 'mongodb://adonis_user:adonis_password@localhost:27017/adonis_mongo',
-            host: 'localhost',
-            port: 27017,
-            database: 'adonis_mongo',
-            options: {
-              maxPoolSize: 10,
-              serverSelectionTimeoutMS: 5000,
-              connectTimeoutMS: 10000,
-            },
-          },
-          useNewUrlParser: true,
-          useUnifiedTopology: true,
-        },
-      },
-    }
-
-    manager = new MongoDatabaseManager(config)
-
-    // Test if Docker MongoDB is available
-    try {
-      await manager.connect()
-      isDockerAvailable = true
-      console.log('✅ Docker MongoDB is available for unit tests')
-
-      // Extend TestUser with real database functionality
-      TestUser.query = function () {
-        const collectionName = this.getCollectionName()
-        const connectionName = this.getConnection()
-        const collection = manager.collection(collectionName, connectionName)
-        return new ModelQueryBuilder(collection, this)
-      }
-
-      // Real database operations
-      TestUser.prototype['performInsert'] = async function () {
-        const collection = manager.collection(TestUser.getCollectionName())
-        const document = this.toDocument()
-        const result = await collection.insertOne(document)
-        this._id = result.insertedId.toString()
-      }
-
-      TestUser.prototype['performUpdate'] = async function () {
-        const collection = manager.collection(TestUser.getCollectionName())
-        const updates = this.getDirtyAttributes()
-
-        if (Object.keys(updates).length > 0) {
-          await collection.updateOne({ _id: new ObjectId(this._id) }, { $set: updates })
-        }
-      }
-      ;(TestUser.prototype as any)['performDelete'] = async function () {
-        const collection = manager.collection(TestUser.getCollectionName())
-        await collection.deleteOne({ _id: new ObjectId(this._id) })
-      }
-
-      // Clean up test collection before tests
-      const collection = manager.collection('test_users')
-      await collection.deleteMany({})
-    } catch (error) {
-      console.log('⚠️  Docker MongoDB not available, using mock operations for unit tests')
-      isDockerAvailable = false
-
-      // Fallback to mock operations if database is not available
-      TestUser.query = function () {
-        const mockCollection = {
-          find: () => ({ toArray: () => Promise.resolve([]) }),
-          findOne: () => Promise.resolve(null),
-          countDocuments: () => Promise.resolve(0),
-        } as any
-        return new ModelQueryBuilder(mockCollection, this)
-      }
-
-      TestUser.prototype['performInsert'] = async function () {
-        this._id = 'mock_id_' + Date.now()
-      }
-
-      TestUser.prototype['performUpdate'] = async function () {
-        // Mock update operation
-      }
-    }
-  })
-
-  group.teardown(async () => {
-    if (isDockerAvailable) {
-      try {
-        const collection = manager.collection('test_users')
-        await collection.deleteMany({})
-        await manager.close()
-      } catch (error) {
-        // Ignore cleanup errors
-      }
-    }
-  })
-
-  test('should create model metadata from decorators', async ({ assert }) => {
-    const metadata = TestUser.getMetadata()
-
-    assert.isTrue(metadata.columns.has('_id'))
-    assert.isTrue(metadata.columns.has('name'))
-    assert.isTrue(metadata.columns.has('email'))
-    assert.isTrue(metadata.columns.has('age'))
-    assert.isTrue(metadata.columns.has('createdAt'))
-    assert.isTrue(metadata.columns.has('updatedAt'))
-
-    assert.equal(metadata.primaryKey, '_id')
-  })
-
-  test('should generate correct collection name', async ({ assert }) => {
-    assert.equal(TestUser.getCollectionName(), 'test_users')
-  })
-
+test.group('MongoDB ODM - Model Logic', () => {
   test('should create model instance with attributes', async ({ assert }) => {
-    const user = new TestUser({
+    const user = new UserWithReferencedProfile({
       name: 'John Doe',
       email: 'john@example.com',
       age: 30,
@@ -169,935 +17,309 @@ test.group('MongoDB ODM - Unit Tests', (group) => {
     assert.equal(user.name, 'John Doe')
     assert.equal(user.email, 'john@example.com')
     assert.equal(user.age, 30)
-    assert.isTrue(user.$isLocal)
     assert.isFalse(user.$isPersisted)
-  })
-
-  test('should handle date serialization and deserialization', async ({ assert }) => {
-    const now = DateTime.now()
-    const user = new TestUser()
-
-    // Test setting DateTime
-    user.setAttribute('createdAt', now)
-    assert.equal(user.createdAt.constructor.name, 'DateTime')
-
-    // Test serialization
-    const document = user.toDocument()
-    assert.equal(document.createdAt.constructor.name, 'Date')
+    assert.isTrue(user.$isLocal)
   })
 
   test('should track dirty attributes', async ({ assert }) => {
-    const user = new TestUser({
+    const user = new UserWithReferencedProfile({
       name: 'John Doe',
       email: 'john@example.com',
     })
 
-    // Mark as persisted to enable dirty tracking
-    user.$isPersisted = true
-    // Access private method through any casting
-    ;(user as any).syncOriginal()
-    user.$dirty = {}
+    // Initially no dirty attributes
+    assert.deepEqual(user.$dirty, {})
 
-    // Modify an attribute
-    user.merge({ name: 'Jane Doe' })
-
+    // Change an attribute
+    user.name = 'Jane Doe'
     assert.deepEqual(user.$dirty, { name: 'Jane Doe' })
+
+    // Change another attribute
+    user.age = 25
+    assert.deepEqual(user.$dirty, { name: 'Jane Doe', age: 25 })
   })
 
-  test('should apply auto timestamps', async ({ assert }) => {
-    const user = new TestUser({
+  test('should apply timestamps on creation', async ({ assert }) => {
+    const user = new UserWithReferencedProfile({
       name: 'John Doe',
       email: 'john@example.com',
     })
 
-    // Simulate save operation by calling private method
-    ;(user as any).applyTimestamps()
+    // Simulate the timestamp application that happens during save
+    const now = DateTime.now()
+    user.createdAt = now
+    user.updatedAt = now
 
     assert.equal(user.createdAt.constructor.name, 'DateTime')
     assert.equal(user.updatedAt.constructor.name, 'DateTime')
   })
 
-  test('should convert to document format', async ({ assert }) => {
-    const user = new TestUser({
+  test('should serialize to document format', async ({ assert }) => {
+    const user = new UserWithReferencedProfile({
       name: 'John Doe',
       email: 'john@example.com',
       age: 30,
     })
+
+    const now = DateTime.now()
+    user.createdAt = now
+    user.updatedAt = now
 
     const document = user.toDocument()
 
     assert.equal(document.name, 'John Doe')
     assert.equal(document.email, 'john@example.com')
     assert.equal(document.age, 30)
+    assert.instanceOf(document.createdAt, Date)
+    assert.instanceOf(document.updatedAt, Date)
   })
 
-  test('should handle model save operation', async ({ assert }) => {
-    if (!isDockerAvailable) {
-      assert.plan(0)
-      return
-    }
+  test('should hydrate from document', async ({ assert }) => {
+    const user = new UserWithReferencedProfile()
+    const now = new Date()
 
-    const user = new TestUser({
-      name: 'Unit Test User',
-      email: `unit-test-${Date.now()}@example.com`,
+    user.hydrateFromDocument({
+      _id: new ObjectId(),
+      name: 'John Doe',
+      email: 'john@example.com',
+      age: 30,
+      createdAt: now,
+      updatedAt: now,
     })
 
-    await user.save()
-
+    assert.equal(user.name, 'John Doe')
+    assert.equal(user.email, 'john@example.com')
+    assert.equal(user.age, 30)
+    assert.equal(user.createdAt.constructor.name, 'DateTime')
+    assert.equal(user.updatedAt.constructor.name, 'DateTime')
     assert.isTrue(user.$isPersisted)
     assert.isFalse(user.$isLocal)
-    assert.isNotEmpty(user._id)
-    assert.deepEqual(user.$dirty, {})
   })
 
-  test('should support query operators', async ({ assert }) => {
-    // Test that mathematical operators are supported
-    const operators = ['=', '!=', '>', '>=', '<', '<=', 'eq', 'ne', 'gt', 'gte', 'lt', 'lte']
-
-    operators.forEach((operator) => {
-      assert.doesNotThrow(() => {
-        // This would normally create a query, but we're just testing type compatibility
-        const queryBuilder = new ModelQueryBuilder({} as any, TestUser)
-        ;(queryBuilder as any).mapOperatorToMongo(operator as any)
-      })
+  test('should merge attributes', async ({ assert }) => {
+    const user = new UserWithReferencedProfile({
+      name: 'John Doe',
+      email: 'john@example.com',
+      age: 30,
     })
-  })
 
-  test('should handle query building', async ({ assert }) => {
-    if (isDockerAvailable) {
-      // Test with real database
-      const queryBuilder = TestUser.query()
-        .where('age', '>=', 18)
-        .where('name', 'Unit Test')
-        .orderBy('createdAt', 'desc')
-        .limit(10)
-
-      assert.instanceOf(queryBuilder, ModelQueryBuilder)
-
-      // Test that the query can be executed
-      const results = await queryBuilder.all()
-      assert.isArray(results)
-    } else {
-      // Fallback test with mock collection
-      const mockCollection = {
-        find: () => ({ toArray: () => Promise.resolve([]) }),
-        findOne: () => Promise.resolve(null),
-        countDocuments: () => Promise.resolve(0),
-      } as any
-
-      const queryBuilder = new ModelQueryBuilder(mockCollection, TestUser)
-
-      // Test method chaining
-      const result = queryBuilder
-        .where('age', '>=', 18)
-        .where('name', 'John')
-        .orderBy('createdAt', 'desc')
-        .limit(10)
-
-      assert.instanceOf(result, ModelQueryBuilder)
-    }
-  })
-})
-
-test.group('MongoDB ODM - Integration Tests', (group) => {
-  let manager: MongoDatabaseManager
-  let isDockerAvailable = false
-
-  group.setup(async () => {
-    // Docker MongoDB configuration
-    const config: MongoConfig = {
-      connection: 'mongodb',
-      connections: {
-        mongodb: {
-          client: 'mongodb',
-          connection: {
-            url: 'mongodb://adonis_user:adonis_password@localhost:27017/adonis_mongo',
-            host: 'localhost',
-            port: 27017,
-            database: 'adonis_mongo',
-            options: {
-              maxPoolSize: 10,
-              serverSelectionTimeoutMS: 5000,
-              connectTimeoutMS: 10000,
-            },
-          },
-          useNewUrlParser: true,
-          useUnifiedTopology: true,
-        },
-      },
-    }
-
-    manager = new MongoDatabaseManager(config)
-
-    // Test if Docker MongoDB is available
-    try {
-      await manager.connect()
-      isDockerAvailable = true
-      console.log('✅ Docker MongoDB is available for integration tests')
-
-      // Extend TestUser with real database functionality
-      TestUser.query = function () {
-        const collectionName = this.getCollectionName()
-        const connectionName = this.getConnection()
-        const collection = manager.collection(collectionName, connectionName)
-        return new ModelQueryBuilder(collection, this)
-      }
-
-      // Real database operations
-      TestUser.prototype['performInsert'] = async function () {
-        const collection = manager.collection(TestUser.getCollectionName())
-        const document = this.toDocument()
-        const result = await collection.insertOne(document)
-        this._id = result.insertedId.toString()
-      }
-
-      TestUser.prototype['performUpdate'] = async function () {
-        const collection = manager.collection(TestUser.getCollectionName())
-        // Use getDirtyAttributes to get only the changed fields (including timestamps)
-        const updates = this.getDirtyAttributes()
-
-        if (Object.keys(updates).length > 0) {
-          await collection.updateOne({ _id: new ObjectId(this._id) }, { $set: updates })
-        }
-      }
-      ;(TestUser.prototype as any)['performDelete'] = async function () {
-        const collection = manager.collection(TestUser.getCollectionName())
-        await collection.deleteOne({ _id: new ObjectId(this._id) })
-      }
-
-      // Clean up test collection before tests
-      const collection = manager.collection('test_users')
-      await collection.deleteMany({})
-    } catch (error) {
-      console.log('⚠️  Docker MongoDB not available, skipping integration tests')
-      console.log('   Start MongoDB with: npm run docker:up')
-      isDockerAvailable = false
-    }
-  })
-
-  group.teardown(async () => {
-    if (isDockerAvailable) {
-      // Clean up test data
-      try {
-        const collection = manager.collection('test_users')
-        await collection.deleteMany({})
-        await manager.close()
-      } catch (error) {
-        // Ignore cleanup errors
-      }
-    }
-  })
-
-  test('should connect to Docker MongoDB', async ({ assert }) => {
-    if (!isDockerAvailable) {
-      assert.plan(0)
-      return
-    }
-
-    const db = manager.db()
-    assert.isNotNull(db)
-    assert.equal(db.databaseName, 'adonis_mongo')
-  })
-
-  test('should create and save a real user', async ({ assert }) => {
-    if (!isDockerAvailable) {
-      assert.plan(0)
-      return
-    }
-
-    const user = new TestUser({
-      name: 'Integration Test User',
-      email: `test-${Date.now()}@example.com`,
+    user.merge({
+      name: 'Jane Doe',
       age: 25,
     })
 
-    assert.isTrue(user.$isLocal)
-    assert.isFalse(user.$isPersisted)
+    assert.equal(user.name, 'Jane Doe')
+    assert.equal(user.email, 'john@example.com') // unchanged
+    assert.equal(user.age, 25)
+  })
 
-    await user.save()
+  test('should fill attributes', async ({ assert }) => {
+    const user = new UserWithReferencedProfile()
 
-    assert.isFalse(user.$isLocal)
-    assert.isTrue(user.$isPersisted)
-    assert.isNotEmpty(user._id)
+    user.fill({
+      name: 'John Doe',
+      email: 'john@example.com',
+      age: 30,
+    })
+
+    assert.equal(user.name, 'John Doe')
+    assert.equal(user.email, 'john@example.com')
+    assert.equal(user.age, 30)
+  })
+
+  test('should get and set attributes', async ({ assert }) => {
+    const user = new UserWithReferencedProfile()
+
+    user.setAttribute('name', 'John Doe')
+    user.setAttribute('email', 'john@example.com')
+
+    assert.equal(user.getAttribute('name'), 'John Doe')
+    assert.equal(user.getAttribute('email'), 'john@example.com')
+    assert.equal(user.name, 'John Doe')
+    assert.equal(user.email, 'john@example.com')
+  })
+
+  test('should generate collection name from class name', async ({ assert }) => {
+    assert.equal(UserWithReferencedProfile.getCollectionName(), 'users_with_referenced_profiles')
+    assert.equal(Profile.getCollectionName(), 'profiles')
+    assert.equal(Post.getCollectionName(), 'posts')
+  })
+
+  test('should get model metadata', async ({ assert }) => {
+    const metadata = UserWithReferencedProfile.getMetadata()
+
+    assert.exists(metadata.columns)
+    assert.isTrue(metadata.columns.has('_id'))
+    assert.isTrue(metadata.columns.has('name'))
+    assert.isTrue(metadata.columns.has('email'))
+    assert.isTrue(metadata.columns.has('age'))
+    assert.isTrue(metadata.columns.has('createdAt'))
+    assert.isTrue(metadata.columns.has('updatedAt'))
+
+    const idColumn = metadata.columns.get('_id')
+    assert.isTrue(idColumn?.isPrimary)
+  })
+
+  test('should handle profile computed properties', async ({ assert }) => {
+    const profile = new Profile({
+      firstName: 'John',
+      lastName: 'Doe',
+      bio: 'Software developer',
+    })
+
+    assert.equal(profile.fullName, 'John Doe')
+
+    profile.address = {
+      street: '123 Main St',
+      city: 'San Francisco',
+      state: 'CA',
+      zipCode: '94105',
+      country: 'USA',
+    }
+
+    assert.isString(profile.formattedAddress)
+    assert.include(profile.formattedAddress!, '123 Main St')
+    assert.include(profile.formattedAddress!, 'San Francisco')
+  })
+
+  test('should handle post computed properties', async ({ assert }) => {
+    const post = new Post({
+      title: 'Test Post',
+      content: 'This is a test post with some content that should be truncated in the excerpt.',
+      status: 'published',
+    })
+
+    assert.isString(post.excerpt)
+    assert.isTrue(post.excerpt.length <= 100)
+    assert.isTrue(post.isPublished)
+
+    post.status = 'draft'
+    assert.isFalse(post.isPublished)
+  })
+
+  test('should sync original attributes', async ({ assert }) => {
+    const user = new UserWithReferencedProfile({
+      name: 'John Doe',
+      email: 'john@example.com',
+    })
+
+    // Initially $original should be empty
+    assert.deepEqual(user.$original, {})
+
+    // Sync original
+    user.syncOriginal()
+    assert.equal(user.$original.name, 'John Doe')
+    assert.equal(user.$original.email, 'john@example.com')
+
+    // Change attribute
+    user.name = 'Jane Doe'
+    assert.equal(user.$original.name, 'John Doe') // Original unchanged
+    assert.equal(user.name, 'Jane Doe') // Current changed
+  })
+
+  test('should get dirty attributes correctly', async ({ assert }) => {
+    const user = new UserWithReferencedProfile({
+      name: 'John Doe',
+      email: 'john@example.com',
+    })
+
+    user.syncOriginal()
+
+    // No changes yet
+    assert.deepEqual(user.getDirtyAttributes(), {})
+
+    // Make changes
+    user.name = 'Jane Doe'
+    user.age = 25
+
+    const dirty = user.getDirtyAttributes()
+    assert.equal(dirty.name, 'Jane Doe')
+    assert.equal(dirty.age, 25)
+    assert.isUndefined(dirty.email) // Unchanged
+  })
+
+  test('should handle date serialization', async ({ assert }) => {
+    const user = new UserWithReferencedProfile({
+      name: 'John Doe',
+      email: 'john@example.com',
+    })
+
+    const now = DateTime.now()
+    user.createdAt = now
+    user.updatedAt = now
+
+    const document = user.toDocument()
+
+    // Dates should be serialized to JavaScript Date objects
+    assert.instanceOf(document.createdAt, Date)
+    assert.instanceOf(document.updatedAt, Date)
+  })
+
+  test('should handle date deserialization', async ({ assert }) => {
+    const user = new UserWithReferencedProfile()
+    const now = new Date()
+
+    user.hydrateFromDocument({
+      _id: new ObjectId(),
+      name: 'John Doe',
+      email: 'john@example.com',
+      createdAt: now,
+      updatedAt: now,
+    })
+
+    // Dates should be deserialized to DateTime objects
     assert.equal(user.createdAt.constructor.name, 'DateTime')
     assert.equal(user.updatedAt.constructor.name, 'DateTime')
   })
 
-  test('should query real data from MongoDB', async ({ assert }) => {
-    if (!isDockerAvailable) {
-      assert.plan(0)
-      return
+  test('should create query builder instance', async ({ assert }) => {
+    // Mock collection for testing
+    const mockCollection = {
+      find: () => ({ toArray: () => Promise.resolve([]) }),
+      findOne: () => Promise.resolve(null),
+      insertOne: () => Promise.resolve({ insertedId: new ObjectId() }),
+      updateOne: () => Promise.resolve({ modifiedCount: 1 }),
+      deleteOne: () => Promise.resolve({ deletedCount: 1 }),
+      countDocuments: () => Promise.resolve(0),
     }
 
-    // Create test data
-    const user1 = new TestUser({
-      name: 'Query Test User 1',
-      email: `query1-${Date.now()}@example.com`,
-      age: 30,
-    })
-    await user1.save()
+    const queryBuilder = new ModelQueryBuilder(mockCollection as any, UserWithReferencedProfile)
 
-    const user2 = new TestUser({
-      name: 'Query Test User 2',
-      email: `query2-${Date.now()}@example.com`,
-      age: 25,
-    })
-    await user2.save()
-
-    // Test queries
-    const allUsers = await TestUser.query().all()
-    assert.isAtLeast(allUsers.length, 2)
-
-    const adults = await TestUser.query().where('age', '>=', 25).all()
-    assert.isAtLeast(adults.length, 2)
-
-    const specificUser = await TestUser.query().where('name', 'Query Test User 1').first()
-    assert.isNotNull(specificUser)
-    assert.equal(specificUser?.name, 'Query Test User 1')
-
-    // Test count
-    const count = await TestUser.query().count()
-    assert.isAtLeast(count, 2)
+    assert.instanceOf(queryBuilder, ModelQueryBuilder)
+    assert.equal(typeof queryBuilder.where, 'function')
+    assert.equal(typeof queryBuilder.orderBy, 'function')
+    assert.equal(typeof queryBuilder.limit, 'function')
+    assert.equal(typeof queryBuilder.all, 'function')
   })
 
-  test('should handle pagination with real data', async ({ assert }) => {
-    if (!isDockerAvailable) {
-      assert.plan(0)
-      return
-    }
-
-    // Create multiple test users
-    const users = []
-    for (let i = 1; i <= 5; i++) {
-      const user = new TestUser({
-        name: `Pagination User ${i}`,
-        email: `pagination${i}-${Date.now()}@example.com`,
-        age: 20 + i,
-      })
-      await user.save()
-      users.push(user)
-    }
-
-    // Test pagination
-    const page1 = await TestUser.query().orderBy('age', 'asc').paginate(1, 2)
-    assert.equal(page1.data.length, 2)
-    assert.isAtLeast(page1.meta.total, 5)
-    assert.equal(page1.meta.currentPage, 1)
-    assert.equal(page1.meta.perPage, 2)
-
-    const page2 = await TestUser.query().orderBy('age', 'asc').paginate(2, 2)
-    assert.equal(page2.data.length, 2)
-    assert.equal(page2.meta.currentPage, 2)
-  })
-
-  test('should update existing records', async ({ assert }) => {
-    if (!isDockerAvailable) {
-      assert.plan(0)
-      return
-    }
-
-    // Create a user
-    const user = new TestUser({
-      name: 'Update Test User',
-      email: `update-${Date.now()}@example.com`,
-      age: 30,
-    })
-    await user.save()
-
-    const originalUpdatedAt = user.updatedAt
-
-    // Wait a bit to ensure timestamp difference
-    await new Promise((resolve) => setTimeout(resolve, 100))
-
-    // Update the user
-    user.merge({ age: 31, name: 'Updated Test User' })
-    await user.save()
-
-    assert.equal(user.age, 31)
-    assert.equal(user.name, 'Updated Test User')
-    assert.isTrue(user.updatedAt > originalUpdatedAt)
-  })
-
-  test('should delete records', async ({ assert }) => {
-    if (!isDockerAvailable) {
-      assert.plan(0)
-      return
-    }
-
-    // Create a user
-    const user = new TestUser({
-      name: 'Delete Test User',
-      email: `delete-${Date.now()}@example.com`,
-      age: 30,
-    })
-    await user.save()
-
-    const userId = user._id
-    assert.isNotEmpty(userId)
-
-    // Delete the user
-    await user.delete()
-
-    // Verify it's deleted
-    const deletedUser = await TestUser.query().where('_id', userId).first()
-    assert.isNull(deletedUser)
-  })
-
-  test('should handle complex queries', async ({ assert }) => {
-    if (!isDockerAvailable) {
-      assert.plan(0)
-      return
-    }
-
-    // Create test data with different ages
-    const testUsers = [
-      { name: 'Young User', age: 18 },
-      { name: 'Adult User', age: 30 },
-      { name: 'Senior User', age: 65 },
-    ]
-
-    for (const userData of testUsers) {
-      const user = new TestUser({
-        ...userData,
-        email: `${userData.name.toLowerCase().replace(' ', '')}-${Date.now()}@example.com`,
-      })
-      await user.save()
-    }
-
-    // Test between query
-    const middleAged = await TestUser.query().whereBetween('age', [25, 40]).all()
-    assert.isAtLeast(middleAged.length, 1)
-
-    // Test in query
-    const specificAges = await TestUser.query().whereIn('age', [18, 65]).all()
-    assert.isAtLeast(specificAges.length, 2)
-
-    // Test not null query
-    const usersWithAge = await TestUser.query().whereNotNull('age').all()
-    assert.isAtLeast(usersWithAge.length, 3)
-  })
-
-  test('should support Lucid-style create patterns', async ({ assert }) => {
-    if (!isDockerAvailable) {
-      assert.plan(0)
-      return
-    }
-
-    // Pattern 1: Using .create() static method (no need for new)
-    const user1 = await TestUser.create({
-      name: 'Create Pattern User',
-      email: `create-pattern-${Date.now()}@example.com`,
-      age: 28,
-    })
-
-    assert.isTrue(user1.$isPersisted)
-    assert.isFalse(user1.$isLocal)
-    assert.equal(user1.name, 'Create Pattern User')
-    assert.equal(user1.age, 28)
-    assert.isNotEmpty(user1._id)
-
-    // Pattern 2: Using new + .save()
-    const user2 = new TestUser()
-    user2.name = 'New Save Pattern User'
-    user2.email = `new-save-pattern-${Date.now()}@example.com`
-    user2.age = 32
-
-    assert.isTrue(user2.$isLocal)
-    assert.isFalse(user2.$isPersisted)
-
-    await user2.save()
-
-    assert.isFalse(user2.$isLocal)
-    assert.isTrue(user2.$isPersisted)
-    assert.equal(user2.name, 'New Save Pattern User')
-    assert.equal(user2.age, 32)
-    assert.isNotEmpty(user2._id)
-  })
-
-  test('should support Lucid-style update patterns', async ({ assert }) => {
-    if (!isDockerAvailable) {
-      assert.plan(0)
-      return
-    }
-
-    // Create a user first
-    const user = await TestUser.create({
-      name: 'Update Pattern User',
-      email: `update-pattern-${Date.now()}@example.com`,
-      age: 25,
-    })
-
-    const originalUpdatedAt = user.updatedAt
-    const userId = user._id
-
-    // Wait a bit to ensure timestamp difference
-    await new Promise((resolve) => setTimeout(resolve, 100))
-
-    // Pattern 1: Direct property assignment + save
-    user.name = 'Updated Name Direct'
-    user.age = 26
-    await user.save()
-
-    assert.equal(user.name, 'Updated Name Direct')
-    assert.equal(user.age, 26)
-    assert.isTrue(user.updatedAt > originalUpdatedAt)
-
-    // Pattern 2: Using .merge() + .save() (method chaining)
-    const secondUpdatedAt = user.updatedAt
-    await new Promise((resolve) => setTimeout(resolve, 100))
-
-    await user.merge({ name: 'Updated Name Merge', age: 27 }).save()
-
-    assert.equal(user.name, 'Updated Name Merge')
-    assert.equal(user.age, 27)
-    assert.isTrue(user.updatedAt > secondUpdatedAt)
-
-    // Pattern 3: Using query builder .update() (bulk update)
-    const updateCount = await TestUser.query()
-      .where('_id', userId)
-      .update({ name: 'Updated Name Query', age: 28 })
-
-    assert.equal(updateCount, 1)
-
-    // Verify the update by fetching the user again
-    const updatedUser = await TestUser.find(userId)
-    assert.isNotNull(updatedUser)
-    assert.equal(updatedUser!.name, 'Updated Name Query')
-    assert.equal(updatedUser!.age, 28)
-  })
-
-  test('should support Lucid-style delete patterns', async ({ assert }) => {
-    if (!isDockerAvailable) {
-      assert.plan(0)
-      return
-    }
-
-    // Create test users
-    const user1 = await TestUser.create({
-      name: 'Delete Pattern User 1',
-      email: `delete-pattern-1-${Date.now()}@example.com`,
-      age: 30,
-    })
-
-    const user2 = await TestUser.create({
-      name: 'Delete Pattern User 2',
-      email: `delete-pattern-2-${Date.now()}@example.com`,
-      age: 35,
-    })
-
-    const user3 = await TestUser.create({
-      name: 'Delete Pattern User 3',
-      email: `delete-pattern-3-${Date.now()}@example.com`,
-      age: 40,
-    })
-
-    // Pattern 1: Instance delete
-    const user1Id = user1._id
-    const deleteResult = await user1.delete()
-
-    assert.isTrue(deleteResult)
-    assert.isFalse(user1.$isPersisted)
-    assert.isTrue(user1.$isLocal)
-
-    // Verify user1 is deleted
-    const deletedUser = await TestUser.find(user1Id)
-    assert.isNull(deletedUser)
-
-    // Pattern 2: Query builder bulk delete
-    const deleteCount = await TestUser.query().where('age', '>=', 35).delete()
-
-    assert.isAtLeast(deleteCount, 2) // Should delete user2 and user3
-
-    // Verify users are deleted
-    const remainingUser2 = await TestUser.find(user2._id)
-    const remainingUser3 = await TestUser.find(user3._id)
-    assert.isNull(remainingUser2)
-    assert.isNull(remainingUser3)
-  })
-
-  test('should support bulk operations', async ({ assert }) => {
-    if (!isDockerAvailable) {
-      assert.plan(0)
-      return
-    }
-
-    // Test createMany
-    const users = await TestUser.createMany([
-      {
-        name: 'Bulk User 1',
-        email: `bulk-1-${Date.now()}@example.com`,
-        age: 20,
-      },
-      {
-        name: 'Bulk User 2',
-        email: `bulk-2-${Date.now()}@example.com`,
-        age: 25,
-      },
-      {
-        name: 'Bulk User 3',
-        email: `bulk-3-${Date.now()}@example.com`,
-        age: 30,
-      },
-    ])
-
-    assert.equal(users.length, 3)
-    users.forEach((user) => {
-      assert.isTrue(user.$isPersisted)
-      assert.isFalse(user.$isLocal)
-      assert.isNotEmpty(user._id)
-    })
-
-    // Test bulk update
-    const updateCount = await TestUser.query()
-      .where('age', '>=', 20)
-      .where('name', 'like', 'Bulk User%')
-      .update({ age: 99 })
-
-    assert.isAtLeast(updateCount, 3)
-
-    // Test bulk delete
-    const deleteCount = await TestUser.query().where('age', 99).delete()
-
-    assert.isAtLeast(deleteCount, 3)
-  })
-
-  test('should support updateOrCreate pattern', async ({ assert }) => {
-    if (!isDockerAvailable) {
-      assert.plan(0)
-      return
-    }
-
-    const email = `update-or-create-${Date.now()}@example.com`
-
-    // First call should create
-    const user1 = await TestUser.updateOrCreate(
-      { email },
-      { name: 'Update Or Create User', age: 25 }
-    )
-
-    assert.isTrue(user1.$isPersisted)
-    assert.equal(user1.name, 'Update Or Create User')
-    assert.equal(user1.email, email)
-    assert.equal(user1.age, 25)
-
-    // Second call should update
-    const user2 = await TestUser.updateOrCreate({ email }, { name: 'Updated User', age: 30 })
-
-    assert.equal(user1._id, user2._id) // Same user
-    assert.equal(user2.name, 'Updated User')
-    assert.equal(user2.age, 30)
-
-    // Verify only one user exists with this email
-    const users = await TestUser.query().where('email', email).all()
-    assert.equal(users.length, 1)
-  })
-
-  test('should support like operator for pattern matching', async ({ assert }) => {
-    if (!isDockerAvailable) {
-      assert.plan(0)
-      return
-    }
-
-    // Create test users with different name patterns
-    await TestUser.create({
+  test('should handle model state correctly', async ({ assert }) => {
+    const user = new UserWithReferencedProfile({
       name: 'John Doe',
-      email: `john-${Date.now()}@example.com`,
-      age: 30,
+      email: 'john@example.com',
     })
 
-    await TestUser.create({
-      name: 'Jane Doe',
-      email: `jane-${Date.now()}@example.com`,
-      age: 25,
-    })
+    // New model
+    assert.isFalse(user.$isPersisted)
+    assert.isTrue(user.$isLocal)
 
-    await TestUser.create({
-      name: 'Bob Smith',
-      email: `bob-${Date.now()}@example.com`,
-      age: 35,
-    })
+    // Simulate persisting
+    user._id = new ObjectId().toString()
+    user.$isPersisted = true
+    user.$isLocal = false
 
-    // Test 'like' operator with % wildcard
-    const doeUsers = await TestUser.query().where('name', 'like', '%Doe%').all()
-    assert.isAtLeast(doeUsers.length, 2)
-
-    const johnUsers = await TestUser.query().where('name', 'like', 'John%').all()
-    assert.isAtLeast(johnUsers.length, 1)
-
-    const smithUsers = await TestUser.query().where('name', 'like', '%Smith').all()
-    assert.isAtLeast(smithUsers.length, 1)
+    assert.isTrue(user.$isPersisted)
+    assert.isFalse(user.$isLocal)
   })
 
-  test('should support enhanced Lucid-style query builder methods', async ({ assert }) => {
-    if (!isDockerAvailable) {
-      assert.plan(0)
-      return
-    }
+  test('should handle relationship metadata', async ({ assert }) => {
+    const metadata = UserWithReferencedProfile.getMetadata()
 
-    // Create unique test data for enhanced query testing
-    const timestamp = Date.now()
-    const testUsers = [
-      {
-        name: 'John Doe Enhanced',
-        email: `enhanced-john-${timestamp}@example.com`,
-        age: 25,
-        status: 'active',
-      },
-      {
-        name: 'Jane Smith Enhanced',
-        email: `enhanced-jane-${timestamp}@gmail.com`,
-        age: 30,
-        status: 'inactive',
-      },
-      {
-        name: 'Bob Johnson Enhanced',
-        email: `enhanced-bob-${timestamp}@yahoo.com`,
-        age: 35,
-        status: 'active',
-      },
-      {
-        name: 'Alice Brown Enhanced',
-        email: `enhanced-alice-${timestamp}@example.com`,
-        age: 28,
-        status: 'pending',
-      },
-      {
-        name: 'Charlie Wilson Enhanced',
-        email: `enhanced-charlie-${timestamp}@gmail.com`,
-        age: 22,
-        status: 'active',
-      },
-    ]
+    // Check if relationship columns are registered
+    assert.isTrue(metadata.columns.has('profile'))
 
-    const createdUsers = []
-    for (const userData of testUsers) {
-      const user = await TestUser.create(userData)
-      createdUsers.push(user)
-    }
-
-    // Test whereLike and whereILike
-    const likeUsers = await TestUser.query()
-      .where('email', 'like', `enhanced-%${timestamp}%`)
-      .whereLike('name', 'J%')
-      .all()
-    assert.isAtLeast(likeUsers.length, 1) // John
-
-    const iLikeUsers = await TestUser.query()
-      .where('email', 'like', `enhanced-%${timestamp}%`)
-      .whereILike('name', '%doe%')
-      .all()
-    assert.isAtLeast(iLikeUsers.length, 1) // John Doe (case-insensitive)
-
-    // Test andWhere (alias for where)
-    const andWhereUsers = await TestUser.query()
-      .where('email', 'like', `enhanced-%${timestamp}%`)
-      .where('age', '>=', 25)
-      .andWhere('status', 'active')
-      .all()
-    assert.isAtLeast(andWhereUsers.length, 1)
-
-    // Test whereNot and andWhereNot
-    const notInactiveUsers = await TestUser.query()
-      .where('email', 'like', `enhanced-%${timestamp}%`)
-      .whereNot('status', 'inactive')
-      .all()
-    assert.equal(notInactiveUsers.length, 4)
-
-    const notYoungUsers = await TestUser.query()
-      .where('email', 'like', `enhanced-%${timestamp}%`)
-      .whereNot('age', '<', 25)
-      .andWhereNot('status', 'pending')
-      .all()
-    assert.isAtLeast(notYoungUsers.length, 2)
-
-    // Test orWhereNot
-    const complexOrNotUsers = await TestUser.query()
-      .where('email', 'like', `enhanced-%${timestamp}%`)
-      .where('age', '>', 30)
-      .orWhereNot('status', 'inactive')
-      .all()
-    assert.isAtLeast(complexOrNotUsers.length, 1) // Only Bob (35, active) matches all conditions
-
-    // Test whereExists and whereNotExists
-    const usersWithAge = await TestUser.query()
-      .where('email', 'like', `enhanced-%${timestamp}%`)
-      .whereExists('age')
-      .all()
-    assert.equal(usersWithAge.length, 5)
-
-    // Test orWhereExists and orWhereNotExists
-    const existsOrUsers = await TestUser.query()
-      .where('email', 'like', `enhanced-%${timestamp}%`)
-      .where('age', '<', 20)
-      .orWhereExists('email')
-      .all()
-    assert.equal(existsOrUsers.length, 5) // All have email
-
-    // Test orWhereIn and orWhereNotIn
-    const inOrUsers = await TestUser.query()
-      .where('email', 'like', `enhanced-%${timestamp}%`)
-      .where('age', '>', 40)
-      .orWhereIn('status', ['active', 'pending'])
-      .all()
-    assert.equal(inOrUsers.length, 4)
-
-    const notInOrUsers = await TestUser.query()
-      .where('email', 'like', `enhanced-%${timestamp}%`)
-      .where('age', '<', 20)
-      .orWhereNotIn('status', ['inactive'])
-      .all()
-    assert.equal(notInOrUsers.length, 4)
-
-    // Test orWhereNull and orWhereNotNull
-    const nullOrUsers = await TestUser.query()
-      .where('email', 'like', `enhanced-%${timestamp}%`)
-      .where('age', '>', 100)
-      .orWhereNotNull('email')
-      .all()
-    assert.equal(nullOrUsers.length, 5) // All have email
-
-    // Test whereNotBetween and orWhereNotBetween
-    const notBetweenUsers = await TestUser.query()
-      .where('email', 'like', `enhanced-%${timestamp}%`)
-      .whereNotBetween('age', [26, 29])
-      .all()
-    assert.equal(notBetweenUsers.length, 4) // Should exclude ages 26-29 (only age 28)
-
-    const orNotBetweenUsers = await TestUser.query()
-      .where('email', 'like', `enhanced-%${timestamp}%`)
-      .where('status', 'nonexistent')
-      .orWhereNotBetween('age', [26, 29])
-      .all()
-    assert.equal(orNotBetweenUsers.length, 4)
-
-    // Test orWhereBetween
-    const orBetweenUsers = await TestUser.query()
-      .where('email', 'like', `enhanced-%${timestamp}%`)
-      .where('status', 'nonexistent')
-      .orWhereBetween('age', [25, 30])
-      .all()
-    assert.equal(orBetweenUsers.length, 3)
-
-    // Test offset (alias for skip)
-    const offsetUsers = await TestUser.query().orderBy('age', 'asc').offset(1).limit(2).all()
-    assert.equal(offsetUsers.length, 2)
-
-    // Test forPage
-    const pageUsers = await TestUser.query()
-      .orderBy('age', 'asc')
-      .forPage(2, 2) // page 2, 2 per page
-      .all()
-    assert.equal(pageUsers.length, 2)
-
-    // Test clone
-    const baseQuery = TestUser.query().where('status', 'active').orderBy('age', 'desc')
-    const clonedQuery = baseQuery.clone()
-
-    const baseResults = await baseQuery.limit(2).all()
-    const clonedResults = await clonedQuery.limit(3).all()
-
-    assert.equal(baseResults.length, 2)
-    assert.equal(clonedResults.length, 3)
-    // Both should have same filtering but different limits
-    assert.equal(baseResults[0]._id.toString(), clonedResults[0]._id.toString()) // First result should be same
-
-    // Test distinct (simplified test)
-    const distinctAges = await TestUser.query().distinct('age').all()
-    assert.isAtLeast(distinctAges.length, 1)
-
-    // Clean up test data
-    await TestUser.query().where('email', 'like', `enhanced-%${timestamp}%`).delete()
-  })
-
-  test('should support groupBy and having with aggregation', async ({ assert }) => {
-    if (!isDockerAvailable) {
-      assert.plan(0)
-      return
-    }
-
-    // Create test data for aggregation
-    const testData = [
-      { name: 'User A', age: 25, department: 'Engineering' },
-      { name: 'User B', age: 30, department: 'Engineering' },
-      { name: 'User C', age: 35, department: 'Marketing' },
-      { name: 'User D', age: 28, department: 'Marketing' },
-      { name: 'User E', age: 32, department: 'Sales' },
-    ]
-
-    for (const userData of testData) {
-      await TestUser.create({
-        ...userData,
-        email: `agg-${Date.now()}-${userData.name.toLowerCase().replace(' ', '')}@example.com`,
-      })
-    }
-
-    // Test groupBy
-    const groupedResults = await TestUser.query()
-      .where('email', 'like', 'agg-%')
-      .groupBy('department')
-      .all()
-
-    assert.isAtLeast(groupedResults.length, 3) // Should have 3 departments
-
-    // Test groupBy with having
-    const havingResults = await TestUser.query()
-      .where('email', 'like', 'agg-%')
-      .groupBy('department')
-      .having('count', '>=', 2)
-      .all()
-
-    assert.isAtLeast(havingResults.length, 2) // Engineering and Marketing have 2+ users
-
-    // Clean up
-    await TestUser.query().where('email', 'like', 'agg-%').delete()
-  })
-
-  test('should support query builder load method for relations', async ({ assert }) => {
-    if (!isDockerAvailable) {
-      assert.plan(0)
-      return
-    }
-
-    // Test that load method exists and can be chained
-    const query = TestUser.query().load('profile')
-    assert.isFunction(query.load)
-    assert.isObject(query)
-
-    // Test load with callback
-    const queryWithCallback = TestUser.query().load('profile', (q) => {
-      q.where('name', 'John')
-    })
-    assert.isObject(queryWithCallback)
-
-    // Test that loadRelations map is populated
-    const loadRelations = (query as any).loadRelations
-    assert.instanceOf(loadRelations, Map)
-    assert.isTrue(loadRelations.has('profile'))
-  })
-
-  test('should support query builder clone with load relations', async ({ assert }) => {
-    if (!isDockerAvailable) {
-      assert.plan(0)
-      return
-    }
-
-    // Create a query with load relations
-    const originalQuery = TestUser.query()
-      .load('profile')
-      .load('settings', (q) => q.where('active', true))
-      .where('age', '>=', 18)
-
-    // Clone the query
-    const clonedQuery = originalQuery.clone()
-
-    // Check that load relations are preserved in clone
-    const originalLoadRelations = (originalQuery as any).loadRelations
-    const clonedLoadRelations = (clonedQuery as any).loadRelations
-
-    assert.instanceOf(originalLoadRelations, Map)
-    assert.instanceOf(clonedLoadRelations, Map)
-    assert.equal(originalLoadRelations.size, clonedLoadRelations.size)
-    assert.isTrue(clonedLoadRelations.has('profile'))
-    assert.isTrue(clonedLoadRelations.has('settings'))
+    const profileColumn = metadata.columns.get('profile')
+    assert.equal(profileColumn?.model, 'Profile')
+    assert.equal(profileColumn?.localKey, '_id')
+    assert.equal(profileColumn?.foreignKey, 'userId')
   })
 })

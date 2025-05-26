@@ -1,6 +1,8 @@
 import { BaseModel } from '../../src/base_model/base_model.js'
 import { column } from '../../src/decorators/column.js'
 import { DateTime } from 'luxon'
+import { belongsTo, type BelongsTo } from '../../src/types/relationships.js'
+import UserWithReferencedProfile from './user_with_referenced_profile.js'
 
 export default class Profile extends BaseModel {
   @column({ isPrimary: true })
@@ -38,17 +40,23 @@ export default class Profile extends BaseModel {
     website?: string
   }
 
+  @column()
+  declare userId: string
+
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
 
   @column.dateTime({ autoCreate: true, autoUpdate: true })
   declare updatedAt: DateTime
 
+  @belongsTo(() => UserWithReferencedProfile)
+  declare user: BelongsTo<typeof UserWithReferencedProfile>
+
   /**
    * Get full name
    */
   get fullName(): string {
-    return `${this.firstName} ${this.lastName}`.trim()
+    return `${this.firstName} ${this.lastName}`
   }
 
   /**
