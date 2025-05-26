@@ -40,7 +40,10 @@ test.group('NestedDocumentHelpers - Unit Tests', (group) => {
   let mockProfiles: MockProfile[]
   let mockUsers: MockUser[]
 
-  group.setup(() => {
+  group.setup(async () => {
+    console.log('✅ Running NestedDocumentHelpers unit tests (utility functions)')
+
+    // Note: These tests primarily test utility functions and don't require database operations
     // Setup mock data
     mockProfiles = [
       Object.assign(new MockProfile(), { _id: 'profile1', name: 'Profile 1', bio: 'Bio 1' }),

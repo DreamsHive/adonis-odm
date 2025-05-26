@@ -14,6 +14,7 @@
     "test:docker:keep": "KEEP_CONTAINERS=true ./scripts/test-with-docker.sh",
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down",
+    "docker:down:volumes": "docker-compose down -v",
     "docker:logs": "docker-compose logs -f",
     "lint": "eslint .",
     "format": "prettier --write .",

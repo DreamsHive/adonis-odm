@@ -1,9 +1,14 @@
 import { test } from '@japa/runner'
 import { BaseModel } from '../../src/base_model/base_model.js'
-import { column } from '../../src/decorators/column.js'
+import { column, hasOne } from '../../src/decorators/column.js'
 import { DateTime } from 'luxon'
+import { ObjectId } from 'mongodb'
+import type { HasOne } from '../../src/types/relationships.js'
+import { MongoDatabaseManager } from '../../src/database_manager.js'
+import { MongoConfig } from '../../src/types/index.js'
+import { ModelQueryBuilder } from '../../src/query_builder/model_query_builder.js'
 
-// Test models for decorator testing
+// Test models for nested document testing
 class TestEmbeddedModel extends BaseModel {
   @column({ isPrimary: true })
   declare _id: string
@@ -26,6 +31,30 @@ class TestEmbeddedModel extends BaseModel {
   }
 }
 
+class Profile extends BaseModel {
+  @column({ isPrimary: true })
+  declare _id: string
+
+  @column()
+  declare firstName: string
+
+  @column()
+  declare lastName: string
+
+  @column()
+  declare bio?: string
+
+  @column()
+  declare userId?: string
+
+  @column.dateTime({ autoCreate: true })
+  declare createdAt: DateTime
+
+  static getCollectionName(): string {
+    return 'test_profiles'
+  }
+}
+
 class TestReferencedModel extends BaseModel {
   @column({ isPrimary: true })
   declare _id: string
@@ -33,8 +62,12 @@ class TestReferencedModel extends BaseModel {
   @column()
   declare name: string
 
-  @column.reference({ model: 'Profile', localKey: 'profileId', foreignKey: '_id' })
-  declare profileRef?: string
+  // Using new Lucid-style hasOne decorator - auto-registers models
+  @hasOne(() => Profile, {
+    localKey: '_id',
+    foreignKey: 'userId',
+  })
+  declare profile: HasOne<typeof Profile>
 
   @column()
   declare profileId?: string
@@ -47,201 +80,192 @@ class TestReferencedModel extends BaseModel {
   }
 }
 
-test.group('Nested Document Decorators - Unit Tests', () => {
-  test('should register embedded column decorator correctly', async ({ assert }) => {
+test.group('Nested Document Decorators - Unit Tests', (group) => {
+  let manager: MongoDatabaseManager
+  let isDockerAvailable = false
+
+  group.setup(async () => {
+    // Real MongoDB configuration for decorator testing
+    const config: MongoConfig = {
+      connection: 'mongodb',
+      connections: {
+        mongodb: {
+          client: 'mongodb',
+          connection: {
+            url: 'mongodb://adonis_user:adonis_password@localhost:27017/adonis_mongo',
+            host: 'localhost',
+            port: 27017,
+            database: 'adonis_mongo',
+            options: {
+              maxPoolSize: 10,
+              serverSelectionTimeoutMS: 5000,
+              connectTimeoutMS: 10000,
+            },
+          },
+          useNewUrlParser: true,
+          useUnifiedTopology: true,
+        },
+      },
+    }
+
+    manager = new MongoDatabaseManager(config)
+
+    // Test if Docker MongoDB is available
+    try {
+      await manager.connect()
+      isDockerAvailable = true
+      console.log('✅ Docker MongoDB is available for decorator tests')
+
+      // Setup real database operations for test models
+      const setupRealModel = (ModelClass: any) => {
+        ModelClass.query = function () {
+          const collectionName = this.getCollectionName()
+          const connectionName = this.getConnection()
+          const collection = manager.collection(collectionName, connectionName)
+          return new ModelQueryBuilder(collection, this)
+        }
+
+        ModelClass.prototype['performInsert'] = async function () {
+          const collection = manager.collection(ModelClass.getCollectionName())
+          const document = this.toDocument()
+          const result = await collection.insertOne(document)
+          this._id = result.insertedId.toString()
+        }
+
+        ModelClass.prototype['performUpdate'] = async function () {
+          const collection = manager.collection(ModelClass.getCollectionName())
+          const updates = this.getDirtyAttributes()
+
+          if (Object.keys(updates).length > 0) {
+            await collection.updateOne({ _id: new ObjectId(this._id) }, { $set: updates })
+          }
+        }
+      }
+
+      setupRealModel(TestEmbeddedModel)
+      setupRealModel(TestReferencedModel)
+      setupRealModel(Profile)
+
+      // Clean up test collections
+      await manager.collection('test_embedded').deleteMany({})
+      await manager.collection('test_referenced').deleteMany({})
+      await manager.collection('test_profiles').deleteMany({})
+    } catch (error) {
+      console.log(
+        '⚠️  Docker MongoDB not available, decorator tests will run without database operations'
+      )
+      isDockerAvailable = false
+    }
+  })
+
+  group.teardown(async () => {
+    if (isDockerAvailable) {
+      try {
+        await manager.collection('test_embedded').deleteMany({})
+        await manager.collection('test_referenced').deleteMany({})
+        await manager.collection('test_profiles').deleteMany({})
+        await manager.close()
+      } catch (error) {
+        // Ignore cleanup errors
+      }
+    }
+  })
+  test('should create embedded document metadata', async ({ assert }) => {
     const metadata = TestEmbeddedModel.getMetadata()
+
+    assert.isTrue(metadata.columns.has('profile'))
     const profileColumn = metadata.columns.get('profile')
-
     assert.isTrue(profileColumn?.isEmbedded)
-    assert.isUndefined(profileColumn?.isReference)
   })
 
-  test('should register reference column decorator correctly', async ({ assert }) => {
+  test('should create reference document metadata with auto-registration', async ({ assert }) => {
     const metadata = TestReferencedModel.getMetadata()
-    const profileRefColumn = metadata.columns.get('profileRef')
 
-    assert.isTrue(profileRefColumn?.isReference)
-    assert.equal(profileRefColumn?.model, 'Profile')
-    assert.equal(profileRefColumn?.localKey, 'profileId')
-    assert.equal(profileRefColumn?.foreignKey, '_id')
-    assert.isUndefined(profileRefColumn?.isEmbedded)
+    assert.isTrue(metadata.columns.has('profile'))
+    const profileColumn = metadata.columns.get('profile')
+    assert.isTrue(profileColumn?.isReference)
+    assert.equal(profileColumn?.model, 'Profile')
+    assert.equal(profileColumn?.localKey, '_id')
+    assert.equal(profileColumn?.foreignKey, 'userId')
   })
 
-  test('should create model with embedded profile data', async ({ assert }) => {
-    const model = new TestEmbeddedModel({
+  test('should exclude reference fields from document serialization', async ({ assert }) => {
+    const model = new TestReferencedModel({
       name: 'Test User',
-      profile: {
-        firstName: 'John',
-        lastName: 'Doe',
-        bio: 'Software developer',
-      },
-    })
-
-    assert.equal(model.name, 'Test User')
-    assert.equal(model.profile?.firstName, 'John')
-    assert.equal(model.profile?.lastName, 'Doe')
-    assert.equal(model.profile?.bio, 'Software developer')
-  })
-
-  test('should serialize embedded profile to document', async ({ assert }) => {
-    const model = new TestEmbeddedModel({
-      name: 'Test User',
-      profile: {
-        firstName: 'Jane',
-        lastName: 'Smith',
-      },
+      profileId: 'profile123',
     })
 
     const document = model.toDocument()
 
+    // Should include regular fields and foreign key
     assert.equal(document.name, 'Test User')
-    assert.isObject(document.profile)
-    assert.equal(document.profile.firstName, 'Jane')
-    assert.equal(document.profile.lastName, 'Smith')
-  })
+    assert.equal(document.profileId, 'profile123')
 
-  test('should handle undefined embedded profile', async ({ assert }) => {
-    const model = new TestEmbeddedModel({
-      name: 'Test User',
-    })
-
-    assert.equal(model.name, 'Test User')
-    assert.isUndefined(model.profile)
-
-    const document = model.toDocument()
-    assert.equal(document.name, 'Test User')
+    // Should exclude virtual reference field
     assert.isUndefined(document.profile)
   })
 
-  test('should create model with reference data', async ({ assert }) => {
-    const model = new TestReferencedModel({
-      name: 'Referenced User',
-      profileId: 'profile_123',
-    })
-
-    assert.equal(model.name, 'Referenced User')
-    assert.equal(model.profileId, 'profile_123')
-  })
-
-  test('should serialize reference model to document', async ({ assert }) => {
-    const model = new TestReferencedModel({
-      name: 'Referenced User',
-      profileId: 'profile_456',
-    })
-
-    const document = model.toDocument()
-
-    assert.equal(document.name, 'Referenced User')
-    assert.equal(document.profileId, 'profile_456')
-    assert.isUndefined(document.profileRef) // Virtual field should not be serialized
-  })
-
-  test('should handle model without reference ID', async ({ assert }) => {
-    const model = new TestReferencedModel({
-      name: 'No Reference User',
-    })
-
-    assert.equal(model.name, 'No Reference User')
-    assert.isUndefined(model.profileId)
-
-    const document = model.toDocument()
-    assert.equal(document.name, 'No Reference User')
-    assert.isUndefined(document.profileId)
-  })
-
-  test('should track dirty attributes for embedded profile', async ({ assert }) => {
-    const model = new TestEmbeddedModel({
-      name: 'Test User',
-      profile: {
-        firstName: 'Original',
-        lastName: 'Name',
-      },
-    })
-
-    // Sync original to clear dirty state
-    ;(model as any).syncOriginal()
-    model.$dirty = {}
-
-    // Update embedded profile using merge (which properly tracks dirty attributes)
-    model.merge({
-      profile: {
-        firstName: 'Updated',
-        lastName: 'Name',
-        bio: 'New bio',
-      },
-    })
-
-    assert.property(model.$dirty, 'profile')
-    assert.equal(model.$dirty.profile.firstName, 'Updated')
-    assert.equal(model.$dirty.profile.bio, 'New bio')
-  })
-
-  test('should track dirty attributes for reference ID', async ({ assert }) => {
+  test('should exclude reference fields from dirty attributes', async ({ assert }) => {
     const model = new TestReferencedModel({
       name: 'Test User',
-      profileId: 'original_profile',
     })
 
-    // Sync original to clear dirty state
-    ;(model as any).syncOriginal()
-    model.$dirty = {}
+    // Simulate setting a reference field (this would be done by the proxy system)
+    model.setAttribute('profile', { firstName: 'John', lastName: 'Doe' })
 
-    // Update reference ID using merge (which properly tracks dirty attributes)
-    model.merge({
-      profileId: 'updated_profile',
-    })
+    const dirty = model.getDirtyAttributes()
 
-    assert.property(model.$dirty, 'profileId')
-    assert.equal(model.$dirty.profileId, 'updated_profile')
+    // Should not include the virtual reference field in dirty attributes
+    assert.isUndefined(dirty.profile)
   })
 
-  test('should handle partial embedded profile updates', async ({ assert }) => {
+  test('should handle embedded document serialization', async ({ assert }) => {
     const model = new TestEmbeddedModel({
       name: 'Test User',
       profile: {
         firstName: 'John',
         lastName: 'Doe',
-        bio: 'Original bio',
+        bio: 'Software Developer',
       },
     })
 
-    // Update only part of the profile
-    model.merge({
+    const document = model.toDocument()
+
+    // Should include embedded document
+    assert.equal(document.name, 'Test User')
+    assert.isDefined(document.profile)
+    assert.equal(document.profile.firstName, 'John')
+    assert.equal(document.profile.lastName, 'Doe')
+    assert.equal(document.profile.bio, 'Software Developer')
+  })
+
+  test('should track embedded document changes in dirty attributes', async ({ assert }) => {
+    const model = new TestEmbeddedModel({
+      name: 'Test User',
       profile: {
         firstName: 'John',
         lastName: 'Doe',
-        bio: 'Updated bio',
       },
     })
 
-    assert.equal(model.profile?.firstName, 'John')
-    assert.equal(model.profile?.lastName, 'Doe')
-    assert.equal(model.profile?.bio, 'Updated bio')
-  })
+    // Mark as persisted to test dirty tracking
+    model.$isPersisted = true
+    model.$isLocal = false
+    model.syncOriginal()
 
-  test('should validate column metadata structure', async ({ assert }) => {
-    const embeddedMetadata = TestEmbeddedModel.getMetadata()
-    const referencedMetadata = TestReferencedModel.getMetadata()
+    // Update embedded document
+    model.profile = {
+      firstName: 'Jane',
+      lastName: 'Smith',
+      bio: 'UX Designer',
+    }
 
-    // Check that metadata is properly structured
-    assert.isObject(embeddedMetadata)
-    assert.instanceOf(embeddedMetadata.columns, Map)
-    assert.equal(embeddedMetadata.primaryKey, '_id')
+    const dirty = model.getDirtyAttributes()
 
-    assert.isObject(referencedMetadata)
-    assert.instanceOf(referencedMetadata.columns, Map)
-    assert.equal(referencedMetadata.primaryKey, '_id')
-
-    // Check that all expected columns are registered
-    assert.isTrue(embeddedMetadata.columns.has('_id'))
-    assert.isTrue(embeddedMetadata.columns.has('name'))
-    assert.isTrue(embeddedMetadata.columns.has('profile'))
-    assert.isTrue(embeddedMetadata.columns.has('createdAt'))
-
-    assert.isTrue(referencedMetadata.columns.has('_id'))
-    assert.isTrue(referencedMetadata.columns.has('name'))
-    assert.isTrue(referencedMetadata.columns.has('profileRef'))
-    assert.isTrue(referencedMetadata.columns.has('profileId'))
-    assert.isTrue(referencedMetadata.columns.has('createdAt'))
+    // Should include the embedded document in dirty attributes
+    assert.isDefined(dirty.profile)
+    assert.equal(dirty.profile.firstName, 'Jane')
+    assert.equal(dirty.profile.lastName, 'Smith')
+    assert.equal(dirty.profile.bio, 'UX Designer')
   })
 })

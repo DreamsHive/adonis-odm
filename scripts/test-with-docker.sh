@@ -42,12 +42,14 @@ check_mongodb() {
 # Function to cleanup
 cleanup() {
     if [ "$KEEP_CONTAINERS" = "false" ]; then
-        echo -e "${YELLOW}🧹 Cleaning up Docker containers...${NC}"
-        npm run docker:down > /dev/null 2>&1 || true
+        echo -e "${YELLOW}🧹 Cleaning up Docker containers and volumes...${NC}"
+        npm run docker:down:volumes > /dev/null 2>&1 || true
+        echo -e "${GREEN}✅ Docker cleanup completed${NC}"
     else
         echo -e "${BLUE}📦 Keeping Docker containers running${NC}"
         echo -e "${BLUE}   Access Mongo Express at: http://localhost:8081${NC}"
         echo -e "${BLUE}   Stop containers with: npm run docker:down${NC}"
+        echo -e "${BLUE}   Remove volumes with: npm run docker:down:volumes${NC}"
     fi
 }
 

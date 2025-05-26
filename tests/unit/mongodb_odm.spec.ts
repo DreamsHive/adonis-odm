@@ -40,18 +40,25 @@ class TestUser extends BaseModel {
 
 test.group('MongoDB ODM - Unit Tests', (group) => {
   let manager: MongoDatabaseManager
+  let isDockerAvailable = false
 
   group.setup(async () => {
-    // Mock configuration for unit testing
+    // Real MongoDB configuration for unit testing
     const config: MongoConfig = {
       connection: 'mongodb',
       connections: {
         mongodb: {
           client: 'mongodb',
           connection: {
+            url: 'mongodb://adonis_user:adonis_password@localhost:27017/adonis_mongo',
             host: 'localhost',
             port: 27017,
-            database: 'test_adonis_mongo',
+            database: 'adonis_mongo',
+            options: {
+              maxPoolSize: 10,
+              serverSelectionTimeoutMS: 5000,
+              connectTimeoutMS: 10000,
+            },
           },
           useNewUrlParser: true,
           useUnifiedTopology: true,
@@ -61,21 +68,77 @@ test.group('MongoDB ODM - Unit Tests', (group) => {
 
     manager = new MongoDatabaseManager(config)
 
-    // Extend TestUser with database functionality (similar to what the provider does)
-    TestUser.query = function () {
-      const collectionName = this.getCollectionName()
-      const connectionName = this.getConnection()
-      const collection = manager.collection(collectionName, connectionName)
-      return new ModelQueryBuilder(collection, this)
-    }
+    // Test if Docker MongoDB is available
+    try {
+      await manager.connect()
+      isDockerAvailable = true
+      console.log('✅ Docker MongoDB is available for unit tests')
 
-    // Mock database operations for unit testing
-    TestUser.prototype['performInsert'] = async function () {
-      this._id = 'mock_id_' + Date.now()
-    }
+      // Extend TestUser with real database functionality
+      TestUser.query = function () {
+        const collectionName = this.getCollectionName()
+        const connectionName = this.getConnection()
+        const collection = manager.collection(collectionName, connectionName)
+        return new ModelQueryBuilder(collection, this)
+      }
 
-    TestUser.prototype['performUpdate'] = async function () {
-      // Mock update operation
+      // Real database operations
+      TestUser.prototype['performInsert'] = async function () {
+        const collection = manager.collection(TestUser.getCollectionName())
+        const document = this.toDocument()
+        const result = await collection.insertOne(document)
+        this._id = result.insertedId.toString()
+      }
+
+      TestUser.prototype['performUpdate'] = async function () {
+        const collection = manager.collection(TestUser.getCollectionName())
+        const updates = this.getDirtyAttributes()
+
+        if (Object.keys(updates).length > 0) {
+          await collection.updateOne({ _id: new ObjectId(this._id) }, { $set: updates })
+        }
+      }
+      ;(TestUser.prototype as any)['performDelete'] = async function () {
+        const collection = manager.collection(TestUser.getCollectionName())
+        await collection.deleteOne({ _id: new ObjectId(this._id) })
+      }
+
+      // Clean up test collection before tests
+      const collection = manager.collection('test_users')
+      await collection.deleteMany({})
+    } catch (error) {
+      console.log('⚠️  Docker MongoDB not available, using mock operations for unit tests')
+      isDockerAvailable = false
+
+      // Fallback to mock operations if database is not available
+      TestUser.query = function () {
+        const mockCollection = {
+          find: () => ({ toArray: () => Promise.resolve([]) }),
+          findOne: () => Promise.resolve(null),
+          countDocuments: () => Promise.resolve(0),
+        } as any
+        return new ModelQueryBuilder(mockCollection, this)
+      }
+
+      TestUser.prototype['performInsert'] = async function () {
+        this._id = 'mock_id_' + Date.now()
+      }
+
+      TestUser.prototype['performUpdate'] = async function () {
+        // Mock update operation
+      }
+    }
+  })
+
+  group.teardown(async () => {
+    if (isDockerAvailable) {
+      try {
+        const collection = manager.collection('test_users')
+        await collection.deleteMany({})
+        await manager.close()
+      } catch (error) {
+        // Ignore cleanup errors
+      }
     }
   })
 
@@ -129,6 +192,8 @@ test.group('MongoDB ODM - Unit Tests', (group) => {
       email: 'john@example.com',
     })
 
+    // Mark as persisted to enable dirty tracking
+    user.$isPersisted = true
     // Access private method through any casting
     ;(user as any).syncOriginal()
     user.$dirty = {}
@@ -167,9 +232,14 @@ test.group('MongoDB ODM - Unit Tests', (group) => {
   })
 
   test('should handle model save operation', async ({ assert }) => {
+    if (!isDockerAvailable) {
+      assert.plan(0)
+      return
+    }
+
     const user = new TestUser({
-      name: 'John Doe',
-      email: 'john@example.com',
+      name: 'Unit Test User',
+      email: `unit-test-${Date.now()}@example.com`,
     })
 
     await user.save()
@@ -194,22 +264,38 @@ test.group('MongoDB ODM - Unit Tests', (group) => {
   })
 
   test('should handle query building', async ({ assert }) => {
-    const mockCollection = {
-      find: () => ({ toArray: () => Promise.resolve([]) }),
-      findOne: () => Promise.resolve(null),
-      countDocuments: () => Promise.resolve(0),
-    } as any
+    if (isDockerAvailable) {
+      // Test with real database
+      const queryBuilder = TestUser.query()
+        .where('age', '>=', 18)
+        .where('name', 'Unit Test')
+        .orderBy('createdAt', 'desc')
+        .limit(10)
 
-    const queryBuilder = new ModelQueryBuilder(mockCollection, TestUser)
+      assert.instanceOf(queryBuilder, ModelQueryBuilder)
 
-    // Test method chaining
-    const result = queryBuilder
-      .where('age', '>=', 18)
-      .where('name', 'John')
-      .orderBy('createdAt', 'desc')
-      .limit(10)
+      // Test that the query can be executed
+      const results = await queryBuilder.all()
+      assert.isArray(results)
+    } else {
+      // Fallback test with mock collection
+      const mockCollection = {
+        find: () => ({ toArray: () => Promise.resolve([]) }),
+        findOne: () => Promise.resolve(null),
+        countDocuments: () => Promise.resolve(0),
+      } as any
 
-    assert.instanceOf(result, ModelQueryBuilder)
+      const queryBuilder = new ModelQueryBuilder(mockCollection, TestUser)
+
+      // Test method chaining
+      const result = queryBuilder
+        .where('age', '>=', 18)
+        .where('name', 'John')
+        .orderBy('createdAt', 'desc')
+        .limit(10)
+
+      assert.instanceOf(result, ModelQueryBuilder)
+    }
   })
 })
 
@@ -267,9 +353,12 @@ test.group('MongoDB ODM - Integration Tests', (group) => {
 
       TestUser.prototype['performUpdate'] = async function () {
         const collection = manager.collection(TestUser.getCollectionName())
-        const document = this.toDocument()
-        const { _id: docId, ...updateDoc } = document
-        await collection.updateOne({ _id: new ObjectId(docId) }, { $set: updateDoc })
+        // Use getDirtyAttributes to get only the changed fields (including timestamps)
+        const updates = this.getDirtyAttributes()
+
+        if (Object.keys(updates).length > 0) {
+          await collection.updateOne({ _id: new ObjectId(this._id) }, { $set: updates })
+        }
       }
       ;(TestUser.prototype as any)['performDelete'] = async function () {
         const collection = manager.collection(TestUser.getCollectionName())
@@ -961,5 +1050,54 @@ test.group('MongoDB ODM - Integration Tests', (group) => {
 
     // Clean up
     await TestUser.query().where('email', 'like', 'agg-%').delete()
+  })
+
+  test('should support query builder load method for relations', async ({ assert }) => {
+    if (!isDockerAvailable) {
+      assert.plan(0)
+      return
+    }
+
+    // Test that load method exists and can be chained
+    const query = TestUser.query().load('profile')
+    assert.isFunction(query.load)
+    assert.isObject(query)
+
+    // Test load with callback
+    const queryWithCallback = TestUser.query().load('profile', (q) => {
+      q.where('name', 'John')
+    })
+    assert.isObject(queryWithCallback)
+
+    // Test that loadRelations map is populated
+    const loadRelations = (query as any).loadRelations
+    assert.instanceOf(loadRelations, Map)
+    assert.isTrue(loadRelations.has('profile'))
+  })
+
+  test('should support query builder clone with load relations', async ({ assert }) => {
+    if (!isDockerAvailable) {
+      assert.plan(0)
+      return
+    }
+
+    // Create a query with load relations
+    const originalQuery = TestUser.query()
+      .load('profile')
+      .load('settings', (q) => q.where('active', true))
+      .where('age', '>=', 18)
+
+    // Clone the query
+    const clonedQuery = originalQuery.clone()
+
+    // Check that load relations are preserved in clone
+    const originalLoadRelations = (originalQuery as any).loadRelations
+    const clonedLoadRelations = (clonedQuery as any).loadRelations
+
+    assert.instanceOf(originalLoadRelations, Map)
+    assert.instanceOf(clonedLoadRelations, Map)
+    assert.equal(originalLoadRelations.size, clonedLoadRelations.size)
+    assert.isTrue(clonedLoadRelations.has('profile'))
+    assert.isTrue(clonedLoadRelations.has('settings'))
   })
 })

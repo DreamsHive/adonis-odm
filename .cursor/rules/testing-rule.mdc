@@ -1,0 +1,6 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+Every testing should be done using Unit Tests

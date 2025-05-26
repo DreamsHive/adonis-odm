@@ -1,5 +1,5 @@
 import { DateTime } from 'luxon'
-import { ObjectId, MongoClient, Db, Collection, Document } from 'mongodb'
+import { ObjectId, MongoClient, Db, Collection, Document, WithId } from 'mongodb'
 
 /**
  * Column decorator options
@@ -13,6 +13,8 @@ export interface ColumnOptions {
   model?: string
   localKey?: string
   foreignKey?: string
+  isArray?: boolean
+  isBelongsTo?: boolean
 }
 
 /**

@@ -1,9 +1,18 @@
 import { DateTime } from 'luxon'
 import { ObjectId, WithId, Document } from 'mongodb'
-import { MODEL_METADATA } from '../decorators/column.js'
 import { ModelQueryBuilder } from '../query_builder/model_query_builder.js'
 import { ModelMetadata, DateColumnOptions } from '../types/index.js'
 import { ModelNotFoundException } from '../exceptions/index.js'
+import {
+  createHasOneProxy,
+  createHasManyProxy,
+  createBelongsToProxy,
+} from '../relationships/relationship_proxies.js'
+
+/**
+ * Symbol to store model metadata
+ */
+export const MODEL_METADATA = Symbol('model_metadata')
 
 /**
  * Base Model class for MongoDB ODM
@@ -36,7 +45,9 @@ export class BaseModel {
 
   constructor(attributes: Record<string, any> = {}) {
     this.fill(attributes)
+    this.applyTimestamps() // Apply auto-create timestamps for new models
     this.syncOriginal()
+    this.initializeRelationshipProxies()
   }
 
   /**
@@ -254,7 +265,27 @@ export class BaseModel {
    */
   fill(attributes: Record<string, any>): this {
     for (const [key, value] of Object.entries(attributes)) {
-      this.setAttribute(key, value)
+      // Use direct assignment during fill to avoid marking as dirty
+      const metadata = (this.constructor as typeof BaseModel).getMetadata()
+      const columnOptions = metadata.columns.get(key)
+
+      // Skip reference fields (virtual properties) during fill
+      if (columnOptions?.isReference) {
+        continue
+      }
+
+      let processedValue = value
+      if (columnOptions?.deserialize) {
+        processedValue = columnOptions.deserialize(value)
+      }
+
+      // If this is a column with a property descriptor, use the private key
+      if (columnOptions && !columnOptions.isReference) {
+        const privateKey = `_${key}`
+        ;(this as any)[privateKey] = processedValue
+      } else {
+        ;(this as any)[key] = processedValue
+      }
     }
     return this
   }
@@ -264,9 +295,20 @@ export class BaseModel {
    */
   merge(attributes: Record<string, any>): this {
     for (const [key, value] of Object.entries(attributes)) {
+      const metadata = (this.constructor as typeof BaseModel).getMetadata()
+      const columnOptions = metadata.columns.get(key)
+
+      // Skip reference fields (virtual properties)
+      if (columnOptions?.isReference) {
+        continue
+      }
+
       if (this.getAttribute(key) !== value) {
         this.setAttribute(key, value)
-        this.$dirty[key] = value
+        // setAttribute already handles dirty tracking, but we need to ensure it's set
+        if (this.$isPersisted) {
+          this.$dirty[key] = value
+        }
       }
     }
     return this
@@ -320,6 +362,16 @@ export class BaseModel {
    * Get an attribute value
    */
   getAttribute(key: string): any {
+    const metadata = (this.constructor as typeof BaseModel).getMetadata()
+    const columnOptions = metadata.columns.get(key)
+
+    // If this is a column with metadata (and not a reference), use the property getter
+    // which will access the private key through the property descriptor
+    if (columnOptions && !columnOptions.isReference) {
+      return (this as any)[key]
+    }
+
+    // For properties without metadata or reference fields, access directly
     return (this as any)[key]
   }
 
@@ -330,11 +382,45 @@ export class BaseModel {
     const metadata = (this.constructor as typeof BaseModel).getMetadata()
     const columnOptions = metadata.columns.get(key)
 
+    // Skip setting reference fields (virtual properties) - they have getters only
+    if (columnOptions?.isReference) {
+      return
+    }
+
     if (columnOptions?.deserialize) {
       value = columnOptions.deserialize(value)
     }
 
-    ;(this as any)[key] = value
+    // If this is a column with a property descriptor, use the private key
+    if (columnOptions) {
+      const privateKey = `_${key}`
+      const oldValue = (this as any)[privateKey]
+      ;(this as any)[privateKey] = value
+
+      // Track dirty attributes if the model is persisted and value changed
+      if (this.$isPersisted && oldValue !== value) {
+        this.$dirty[key] = value
+      }
+    } else {
+      // For properties without column metadata, check if it's a getter-only property
+      const descriptor =
+        Object.getOwnPropertyDescriptor(this, key) ||
+        Object.getOwnPropertyDescriptor(Object.getPrototypeOf(this), key)
+
+      if (descriptor && descriptor.get && !descriptor.set) {
+        // This is a getter-only property, skip setting it
+        return
+      }
+
+      // Set directly for properties without metadata
+      const oldValue = (this as any)[key]
+      ;(this as any)[key] = value
+
+      // Track dirty attributes if the model is persisted and value changed
+      if (this.$isPersisted && oldValue !== value) {
+        this.$dirty[key] = value
+      }
+    }
   }
 
   /**
@@ -346,10 +432,20 @@ export class BaseModel {
     for (const [key, value] of Object.entries(document)) {
       const columnOptions = metadata.columns.get(key)
 
+      let processedValue = value
       if (columnOptions?.deserialize) {
-        this.setAttribute(key, columnOptions.deserialize(value))
+        processedValue = columnOptions.deserialize(value)
+      }
+
+      // Special handling for _id field - always set it directly
+      if (key === '_id') {
+        this._id = processedValue
+      } else if (columnOptions && !columnOptions.isReference) {
+        // If this is a column with a property descriptor, use the private key
+        const privateKey = `_${key}`
+        ;(this as any)[privateKey] = processedValue
       } else {
-        this.setAttribute(key, value)
+        ;(this as any)[key] = processedValue
       }
     }
 
@@ -365,10 +461,49 @@ export class BaseModel {
     const metadata = (this.constructor as typeof BaseModel).getMetadata()
     const document: Record<string, any> = {}
 
+    // Process all columns defined in metadata
     for (const [key] of metadata.columns) {
-      const value = this.getAttribute(key)
       const columnOptions = metadata.columns.get(key)
 
+      // Skip reference fields (virtual properties) - they should not be serialized to database
+      if (columnOptions?.isReference) {
+        continue
+      }
+
+      const value = this.getAttribute(key)
+
+      if (value !== undefined) {
+        if (columnOptions?.serialize) {
+          document[key] = columnOptions.serialize(value)
+        } else {
+          document[key] = value
+        }
+      }
+    }
+
+    // Also include any additional properties that might not be in metadata
+    const allProperties = Object.getOwnPropertyNames(this).concat(Object.keys(this))
+    const uniqueProperties = [...new Set(allProperties)]
+
+    for (const key of uniqueProperties) {
+      // Skip internal properties and private keys
+      if (key.startsWith('$') || (key.startsWith('_') && key !== '_id')) {
+        continue
+      }
+
+      // Skip if already processed
+      if (document.hasOwnProperty(key)) {
+        continue
+      }
+
+      const columnOptions = metadata.columns.get(key)
+
+      // Skip reference fields (virtual properties) - they should not be serialized to database
+      if (columnOptions?.isReference) {
+        continue
+      }
+
+      const value = this.getAttribute(key)
       if (value !== undefined) {
         if (columnOptions?.serialize) {
           document[key] = columnOptions.serialize(value)
@@ -442,35 +577,69 @@ export class BaseModel {
   }
 
   /**
-   * Get dirty attributes for update
+   * Get dirty attributes for the model
    */
-  private getDirtyAttributes(): Record<string, any> {
+  public getDirtyAttributes(): Record<string, any> {
+    const dirty: Record<string, any> = {}
     const metadata = (this.constructor as typeof BaseModel).getMetadata()
-    const updates: Record<string, any> = {}
 
-    for (const key of Object.keys(this.$dirty)) {
-      const value = this.getAttribute(key)
+    for (const [key, value] of Object.entries(this.$dirty)) {
+      // Skip internal properties
+      if (key.startsWith('$') || (key.startsWith('_') && key !== '_id')) {
+        continue
+      }
+
       const columnOptions = metadata.columns.get(key)
 
-      if (columnOptions?.serialize) {
-        updates[key] = columnOptions.serialize(value)
+      // Skip reference fields (virtual properties) from dirty attributes
+      if (columnOptions?.isReference) {
+        continue
+      }
+
+      // Serialize the value if needed
+      if (columnOptions?.serialize && typeof columnOptions.serialize === 'function') {
+        dirty[key] = columnOptions.serialize(value)
       } else {
-        updates[key] = value
+        dirty[key] = this.serializeValue(value, key)
       }
     }
 
-    return updates
+    return dirty
   }
 
   /**
-   * Sync original values
+   * Serialize a value for database storage
    */
-  private syncOriginal(): void {
+  private serializeValue(value: any, key: string): any {
     const metadata = (this.constructor as typeof BaseModel).getMetadata()
-    this.$original = {}
+    const columnOptions = metadata.columns.get(key)
 
-    for (const [key] of metadata.columns) {
-      this.$original[key] = this.getAttribute(key)
+    if (columnOptions?.serialize && typeof columnOptions.serialize === 'function') {
+      return columnOptions.serialize(value)
     }
+
+    // Handle DateTime serialization
+    if (value && typeof value === 'object' && value.constructor.name === 'DateTime') {
+      return value.toJSDate()
+    }
+
+    return value
+  }
+
+  /**
+   * Sync the original values with current values
+   */
+  public syncOriginal(): void {
+    this.$original = { ...this.toDocument() }
+    this.$dirty = {}
+  }
+
+  /**
+   * Initialize relationship proxies for Lucid-style property access
+   * Note: Relationship proxies are now created directly by the decorators
+   */
+  private initializeRelationshipProxies(): void {
+    // Relationship proxies are automatically created by the @hasOne, @hasMany, @belongsTo decorators
+    // No manual initialization needed
   }
 }
