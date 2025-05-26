@@ -35,6 +35,33 @@ export function column(options: ColumnOptions = {}) {
 }
 
 /**
+ * Embedded document decorator
+ */
+column.embedded = function (options: ColumnOptions = {}) {
+  return function (target: any, propertyKey: string) {
+    const metadata = getMetadata(target)
+    metadata.columns.set(propertyKey, { ...options, isEmbedded: true })
+  }
+}
+
+/**
+ * Reference decorator for document references
+ */
+column.reference = function (
+  options: ColumnOptions & { model?: string; localKey?: string; foreignKey?: string } = {}
+) {
+  return function (target: any, propertyKey: string) {
+    const metadata = getMetadata(target)
+    metadata.columns.set(propertyKey, {
+      ...options,
+      isReference: true,
+      localKey: options.localKey || propertyKey + 'Id',
+      foreignKey: options.foreignKey || '_id',
+    })
+  }
+}
+
+/**
  * Date column decorator with auto-create and auto-update functionality
  */
 column.date = function (

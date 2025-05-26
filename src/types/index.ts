@@ -8,6 +8,11 @@ export interface ColumnOptions {
   isPrimary?: boolean
   serialize?: (value: any) => any
   deserialize?: (value: any) => any
+  isEmbedded?: boolean
+  isReference?: boolean
+  model?: string
+  localKey?: string
+  foreignKey?: string
 }
 
 /**
