@@ -12,8 +12,8 @@ export default class CrudsController {
 
     // Create user with the validated payload
     const user = await UserWithReferencedProfile.create({
-      name: `${payload.first_name} ${payload.last_name}`,
       email: payload.email,
+      encryptedPassword: payload.password,
     })
 
     // Create the associated profile
@@ -37,7 +37,6 @@ export default class CrudsController {
     try {
       // Create test data
       const user = await UserWithReferencedProfile.create({
-        name: 'Debug User',
         email: 'debug@test.com',
       })
 
@@ -57,7 +56,6 @@ export default class CrudsController {
       const debugInfo = {
         user: {
           _id: user._id,
-          name: user.name,
         },
         profile: {
           _id: profile._id,
@@ -67,7 +65,6 @@ export default class CrudsController {
         loadedUser: {
           exists: !!loadedUser,
           _id: loadedUser?._id,
-          name: loadedUser?.name,
           profile: {
             exists: !!loadedUser?.profile,
             isLoaded: loadedUser?.profile?.isLoaded,

@@ -34,6 +34,7 @@ export interface ModelMetadata {
   columns: Map<string, ColumnOptions>
   primaryKey?: string
   tableName?: string
+  hooks?: Map<string, string[]>
 }
 
 /**

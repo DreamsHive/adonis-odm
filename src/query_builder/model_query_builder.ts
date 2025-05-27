@@ -565,6 +565,19 @@ export class ModelQueryBuilder<
    * Execute query and return first result
    */
   async first(): Promise<TModel | null> {
+    const { executeHooks } = await import('../base_model/hooks_executor.js')
+    const modelClass = this.modelConstructor as typeof BaseModel & { new (...args: any[]): any }
+
+    // Execute beforeFind hook (for single record queries)
+    if (!(await executeHooks(this, 'beforeFind', modelClass))) {
+      return null // Operation aborted by hook
+    }
+
+    // Execute beforeFetch hook
+    if (!(await executeHooks(this, 'beforeFetch', modelClass))) {
+      return null // Operation aborted by hook
+    }
+
     const options: FindOptions<T> = {}
 
     if (this.selectFields) {
@@ -575,7 +588,9 @@ export class ModelQueryBuilder<
       options.sort = this.sortOptions as Sort
     }
 
-    const result = await this.collection.findOne(this.getFinalFilters(), options)
+    // Use potentially modified filters from hooks
+    const finalFilters = this.getFinalFilters()
+    const result = await this.collection.findOne(finalFilters, options)
     if (!result) return null
 
     const deserializedResult = this.deserializeDocument(result)
@@ -590,6 +605,12 @@ export class ModelQueryBuilder<
     if (this.loadRelations.size > 0) {
       await this.loadReferencedDocuments([model])
     }
+
+    // Execute afterFind hook
+    await executeHooks(model, 'afterFind', modelClass)
+
+    // Execute afterFetch hook with array containing single model
+    await executeHooks([model], 'afterFetch', modelClass)
 
     return model as TModel
   }
@@ -616,6 +637,14 @@ export class ModelQueryBuilder<
    * Execute query and return all results (alias for all)
    */
   async fetch(): Promise<TModel[]> {
+    const { executeHooks } = await import('../base_model/hooks_executor.js')
+    const modelClass = this.modelConstructor as typeof BaseModel & { new (...args: any[]): any }
+
+    // Execute beforeFetch hook
+    if (!(await executeHooks(this, 'beforeFetch', modelClass))) {
+      return [] // Operation aborted by hook
+    }
+
     // Handle distinct queries
     if (this.distinctField) {
       const distinctValues = await this.collection.distinct(
@@ -651,7 +680,9 @@ export class ModelQueryBuilder<
       options.skip = this.skipValue
     }
 
-    const cursor = this.collection.find(this.getFinalFilters(), options)
+    // Use potentially modified filters from hooks
+    const finalFilters = this.getFinalFilters()
+    const cursor = this.collection.find(finalFilters, options)
     const results = await cursor.toArray()
 
     const deserializedResults = results.map((doc) => this.deserializeDocument(doc))
@@ -669,6 +700,9 @@ export class ModelQueryBuilder<
     if (this.loadRelations.size > 0) {
       await this.loadReferencedDocuments(modelInstances)
     }
+
+    // Execute afterFetch hook
+    await executeHooks(modelInstances, 'afterFetch', modelClass)
 
     return modelInstances as unknown as TModel[]
   }

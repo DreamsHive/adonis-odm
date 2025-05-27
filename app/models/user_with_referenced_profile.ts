@@ -1,6 +1,7 @@
 import { BaseModel } from '../../src/base_model/base_model.js'
-import { column, hasOne, computed } from '../../src/decorators/column.js'
+import { column, hasOne, computed, beforeSave } from '../../src/decorators/column.js'
 import { DateTime } from 'luxon'
+import hash from '@adonisjs/core/services/hash'
 import Profile from './profile.js'
 import type { HasOne } from '../../src/types/relationships.js'
 
@@ -13,13 +14,13 @@ export default class UserWithReferencedProfile extends BaseModel {
   declare _id: string
 
   @column()
-  declare name: string
-
-  @column()
   declare email: string
 
   @column()
-  declare age?: number
+  declare age: number
+
+  @column({ serializeAs: null })
+  declare encryptedPassword: string
 
   // Lucid-style hasOne decorator - automatically registers models and creates relationship
   @hasOne(() => Profile, {
@@ -50,5 +51,12 @@ export default class UserWithReferencedProfile extends BaseModel {
   @computed()
   get formattedAddress() {
     return this.profile?.formattedAddress ?? ''
+  }
+
+  @beforeSave()
+  static async hashPassword(user: UserWithReferencedProfile) {
+    if (user.$dirty.encryptedPassword) {
+      user.encryptedPassword = await hash.make(user.encryptedPassword)
+    }
   }
 }

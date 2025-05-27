@@ -7,6 +7,22 @@ import {
 } from '../relationships/relationship_proxies.js'
 import { MODEL_METADATA } from '../base_model/base_model.js'
 
+// Export hook decorators
+export {
+  beforeSave,
+  afterSave,
+  beforeCreate,
+  afterCreate,
+  beforeUpdate,
+  afterUpdate,
+  beforeDelete,
+  afterDelete,
+  beforeFind,
+  afterFind,
+  beforeFetch,
+  afterFetch,
+} from './hooks.js'
+
 /**
  * Get or create metadata for a model
  */

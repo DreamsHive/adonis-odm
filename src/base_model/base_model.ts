@@ -94,6 +94,20 @@ export class BaseModel {
 
   constructor(attributes: Record<string, any> = {}) {
     this.fill(attributes)
+
+    // For new models, mark all filled attributes as dirty so hooks can detect them
+    if (!this.$isPersisted) {
+      for (const [key, value] of Object.entries(attributes)) {
+        const metadata = (this.constructor as typeof BaseModel).getMetadata()
+        const columnOptions = metadata.columns.get(key)
+
+        // Skip reference fields and computed properties
+        if (!columnOptions?.isReference && !columnOptions?.isComputed) {
+          this.$dirty[key] = value
+        }
+      }
+    }
+
     this.applyTimestamps() // Apply auto-create timestamps for new models
     this.initializeRelationshipProxies()
 
@@ -224,12 +238,8 @@ export class BaseModel {
     this: typeof BaseModel & (new (...args: any[]) => T),
     id: string | ObjectId
   ): Promise<T | null> {
-    const result = await (this as any).query().where('_id', id).first()
-    if (!result) return null
-
-    const instance = new this()
-    instance.hydrateFromDocument(result)
-    return instance
+    // Use the query builder which already has hooks integrated
+    return await (this as any).query().where('_id', id).first()
   }
 
   /**
@@ -254,12 +264,8 @@ export class BaseModel {
     field: string,
     value: any
   ): Promise<T | null> {
-    const result = await (this as any).query().where(field, value).first()
-    if (!result) return null
-
-    const instance = new this()
-    instance.hydrateFromDocument(result)
-    return instance
+    // Use the query builder which already has hooks integrated
+    return await (this as any).query().where(field, value).first()
   }
 
   /**
@@ -283,12 +289,8 @@ export class BaseModel {
   static async first<T extends BaseModel>(
     this: typeof BaseModel & (new (...args: any[]) => T)
   ): Promise<T | null> {
-    const result = await (this as any).query().first()
-    if (!result) return null
-
-    const instance = new this()
-    instance.hydrateFromDocument(result)
-    return instance
+    // Use the query builder which already has hooks integrated
+    return await (this as any).query().first()
   }
 
   /**
@@ -310,12 +312,8 @@ export class BaseModel {
   static async all<T extends BaseModel>(
     this: typeof BaseModel & (new (...args: any[]) => T)
   ): Promise<T[]> {
-    const results = await (this as any).query().all()
-    return results.map((doc: any) => {
-      const instance = new this()
-      instance.hydrateFromDocument(doc)
-      return instance
-    })
+    // Use the query builder which already has hooks integrated
+    return await (this as any).query().all()
   }
 
   /**
@@ -435,20 +433,60 @@ export class BaseModel {
    * Save the model to the database
    */
   async save(): Promise<this> {
-    this.applyTimestamps()
+    const { executeHooks } = await import('./hooks_executor.js')
+    const modelClass = this.constructor as typeof BaseModel & { new (...args: any[]): any }
 
-    if (this.$isPersisted) {
-      // Update existing document
-      await this.performUpdate()
-    } else {
-      // Insert new document
-      await this.performInsert()
+    // Execute beforeSave hook
+    if (!(await executeHooks(this, 'beforeSave', modelClass))) {
+      return this // Operation aborted by hook
     }
 
-    this.syncOriginal()
-    this.$dirty = {}
-    this.$isPersisted = true
-    this.$isLocal = false
+    const isNew = !this.$isPersisted
+
+    if (isNew) {
+      // Execute beforeCreate hook for new models
+      if (!(await executeHooks(this, 'beforeCreate', modelClass))) {
+        return this // Operation aborted by hook
+      }
+    } else {
+      // Execute beforeUpdate hook for existing models
+      if (!(await executeHooks(this, 'beforeUpdate', modelClass))) {
+        return this // Operation aborted by hook
+      }
+    }
+
+    this.applyTimestamps()
+
+    let dbOperationSuccessful = false
+    try {
+      if (isNew) {
+        await this.performInsert()
+      } else {
+        await this.performUpdate()
+      }
+      dbOperationSuccessful = true
+    } catch (error) {
+      // If DB operation failed, don't run after hooks
+      throw error
+    }
+
+    if (dbOperationSuccessful) {
+      this.syncOriginal()
+      this.$dirty = {}
+      this.$isPersisted = true
+      this.$isLocal = false
+
+      // Execute afterSave hook
+      await executeHooks(this, 'afterSave', modelClass)
+
+      if (isNew) {
+        // Execute afterCreate hook for new models
+        await executeHooks(this, 'afterCreate', modelClass)
+      } else {
+        // Execute afterUpdate hook for existing models
+        await executeHooks(this, 'afterUpdate', modelClass)
+      }
+    }
 
     return this
   }
@@ -461,6 +499,14 @@ export class BaseModel {
       return false
     }
 
+    const { executeHooks } = await import('./hooks_executor.js')
+    const modelClass = this.constructor as typeof BaseModel & { new (...args: any[]): any }
+
+    // Execute beforeDelete hook
+    if (!(await executeHooks(this, 'beforeDelete', modelClass))) {
+      return false // Operation aborted by hook
+    }
+
     const result = await (this.constructor as typeof BaseModel as any)
       .query()
       .where('_id', this._id)
@@ -469,6 +515,10 @@ export class BaseModel {
     if (result > 0) {
       this.$isPersisted = false
       this.$isLocal = true
+
+      // Execute afterDelete hook
+      await executeHooks(this, 'afterDelete', modelClass)
+
       return true
     }
 
@@ -675,7 +725,6 @@ export class BaseModel {
     const metadata = (this.constructor as typeof BaseModel).getMetadata()
     const namingStrategy = (this.constructor as typeof BaseModel).namingStrategy
     const json: Record<string, any> = {}
-
     // Process all columns defined in metadata
     for (const [key] of metadata.columns) {
       const columnOptions = metadata.columns.get(key)
@@ -755,7 +804,15 @@ export class BaseModel {
         continue
       }
 
-      const columnOptions = metadata.columns.get(key)
+      // Try to find metadata for this property
+      // First try direct lookup, then try camelCase conversion
+      let columnOptions = metadata.columns.get(key)
+
+      // If not found and key is snake_case, try camelCase version
+      if (!columnOptions && key.includes('_')) {
+        const camelCaseKey = key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase())
+        columnOptions = metadata.columns.get(camelCaseKey)
+      }
 
       // Skip reference fields (already handled above)
       if (columnOptions?.isReference) {
@@ -845,7 +902,7 @@ export class BaseModel {
   /**
    * Perform database insert
    */
-  private async performInsert(): Promise<void> {
+  protected async performInsert(): Promise<void> {
     const document = this.toDocument()
 
     // Remove _id if it's undefined to let MongoDB generate it
@@ -861,7 +918,7 @@ export class BaseModel {
   /**
    * Perform database update
    */
-  private async performUpdate(): Promise<void> {
+  protected async performUpdate(): Promise<void> {
     if (!this._id) {
       throw new Error('Cannot update model without an ID')
     }

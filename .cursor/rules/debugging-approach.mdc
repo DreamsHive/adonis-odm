@@ -1,0 +1,149 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+# Systematic Debugging Approach
+
+When implementing complex features or troubleshooting issues, follow this systematic debugging approach:
+
+## 1. **Add Strategic Debug Logging**
+
+When implementing new features or debugging issues, add comprehensive debug logging at key points:
+
+```typescript
+// Example: Hook execution debugging
+console.log(`🎯 executeHooks called for ${hookType} on ${modelClass.name}`)
+console.log(`📋 Found ${hookMethodNames.length} hooks for ${hookType}:`, hookMethodNames)
+
+// Example: Data state debugging
+console.log('🔥 beforeSave hook called!', {
+  dirty: user.$dirty,
+  encryptedPassword: user.encryptedPassword
+})
+
+// Example: Conditional debugging
+if (user.$dirty.encryptedPassword) {
+  console.log('🔒 Hashing password...')
+  // ... perform action
+  console.log('✅ Password hashed successfully')
+} else {
+  console.log('⚠️ encryptedPassword not in dirty attributes')
+}
+```
+
+### Debug Logging Guidelines:
+- Use emojis for visual distinction (🎯, 🔥, 📋, ✅, ⚠️, ❌)
+- Log both input state and execution flow
+- Include relevant data structures (like `$dirty`, metadata)
+- Use conditional logging to understand branching logic
+- Log before and after critical operations
+
+## 2. **Test with Real Implementation**
+
+Always test with real HTTP requests using curl, not just unit tests:
+
+```bash
+# Test the actual endpoint with real data
+curl -X POST http://localhost:3333/create \
+  -H "Content-Type: application/json" \
+  -d '{"email": "test@example.com", "password": "TestPassword123"}'
+```
+
+### Real Testing Benefits:
+- Reveals integration issues that unit tests miss
+- Shows actual data flow through the entire system
+- Exposes timing and async issues
+- Validates the complete user experience
+
+## 3. **Analyze Server Logs Systematically**
+
+When debugging, always ask for and carefully analyze server logs:
+
+```
+🎯 executeHooks called for beforeSave on UserWithReferencedProfile
+📋 Found 1 hooks for beforeSave: [ 'hashPassword' ]
+🔥 beforeSave hook called! { dirty: {}, encryptedPassword: 'DebugPassword123' }
+⚠️ encryptedPassword not in dirty attributes
+```
+
+### Log Analysis Process:
+1. **Trace execution flow** - Follow the sequence of operations
+2. **Identify data state** - Check what data is available at each step
+3. **Spot anomalies** - Look for unexpected values (like empty `dirty: {}`)
+4. **Connect cause and effect** - Link symptoms to root causes
+
+## 4. **Root Cause Analysis**
+
+Use the debug information to identify the root cause:
+
+### Example Process:
+1. **Symptom**: Password not being hashed
+2. **Debug Evidence**: `dirty: {}` shows no dirty attributes
+3. **Hypothesis**: Fields not marked as dirty during model creation
+4. **Investigation**: Check how `create()` method populates models
+5. **Root Cause**: `fill()` method intentionally avoids marking fields as dirty
+6. **Solution**: Modify constructor to mark fields as dirty for new models
+
+## 5. **Incremental Testing and Verification**
+
+After implementing fixes:
+
+```bash
+# Test the fix immediately
+curl -X POST http://localhost:3333/create \
+  -H "Content-Type: application/json" \
+  -d '{"email": "fixed@example.com", "password": "FixedPassword123"}'
+
+# Verify the result shows hashed password
+# Before: "encrypted_password": "FixedPassword123"
+# After:  "encrypted_password": "$scrypt$n=16384,r=8,p=1$..."
+```
+
+### Verification Steps:
+1. **Immediate testing** after each fix
+2. **Multiple test cases** with different data
+3. **Clean up debug logs** once confirmed working
+4. **Document the solution** for future reference
+
+## 6. **Clean Up Debug Code**
+
+Once the issue is resolved, clean up debug logging:
+
+```typescript
+// Remove debug logs but keep the working implementation
+@beforeSave()
+static async hashPassword(user: UserWithReferencedProfile) {
+  if (user.$dirty.encryptedPassword) {
+    user.encryptedPassword = await hash.make(user.encryptedPassword)
+  }
+}
+```
+
+## 7. **Documentation and Knowledge Capture**
+
+Document the debugging process and solution:
+
+### What to Document:
+- **The original problem** and symptoms
+- **Debug approach used** and key findings
+- **Root cause identified** and why it occurred
+- **Solution implemented** and how it works
+- **Testing approach** that verified the fix
+
+## 8. **Debugging Mindset**
+
+### Key Principles:
+- **Be systematic** - Follow a logical debugging process
+- **Use real data** - Test with actual user scenarios
+- **Trust the logs** - Let debug output guide your investigation
+- **Think holistically** - Consider the entire data flow
+- **Verify thoroughly** - Test multiple scenarios before concluding
+
+### Common Debugging Patterns:
+- **Data flow tracing** - Follow data through the system
+- **State inspection** - Check object state at key points
+- **Timing analysis** - Understand when operations occur
+- **Integration testing** - Test the complete user journey
+
+This approach ensures thorough investigation, accurate problem identification, and reliable solutions.

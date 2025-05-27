@@ -18,6 +18,9 @@ export default class Profile extends BaseModel {
   declare bio?: string
 
   @column()
+  declare age: number
+
+  @column()
   declare avatar?: string
 
   @column()
