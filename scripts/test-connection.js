@@ -4,7 +4,7 @@ import { MongoClient } from 'mongodb'
 
 // MongoDB connection configuration for Docker setup
 const config = {
-  uri: 'mongodb://adonis_user:adonis_password@localhost:27017/adonis_mongo',
+  uri: 'mongodb://localhost:27017/adonis_mongo?replicaSet=rs0&directConnection=false',
   options: {
     maxPoolSize: 10,
     serverSelectionTimeoutMS: 5000,

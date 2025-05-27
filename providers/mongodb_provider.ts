@@ -4,6 +4,13 @@ import { BaseModel } from '../src/base_model/base_model.js'
 import { ModelQueryBuilder } from '../src/query_builder/model_query_builder.js'
 import { MongoConfig } from '../src/types/index.js'
 
+declare module '@adonisjs/core/types' {
+  interface ContainerBindings {
+    'mongodb.manager': MongoDatabaseManager
+    'mongodb': MongoDatabaseManager
+  }
+}
+
 /**
  * MongoDB ODM Service Provider for AdonisJS
  */
@@ -33,9 +40,9 @@ export default class MongodbProvider {
 
     this.manager = new MongoDatabaseManager(config)
 
-    // Store it in the container using bind with any type
-    ;(this.app.container as any).bind('mongodb.manager', () => this.manager)
-    ;(this.app.container as any).bind('mongodb', () => this.manager)
+    // Store it in the container
+    this.app.container.bind('mongodb.manager', () => this.manager!)
+    this.app.container.bind('mongodb', () => this.manager!)
   }
 
   /**
@@ -80,16 +87,26 @@ export default class MongodbProvider {
     const manager = this.manager!
 
     // Override the static query method to use the actual database connection
-    BaseModel.query = function (this: typeof BaseModel) {
+    BaseModel.query = function <T extends BaseModel = BaseModel>(
+      this: typeof BaseModel & (new (...args: any[]) => T),
+      options?: any
+    ) {
       const collectionName = this.getCollectionName()
       const connectionName = this.getConnection()
 
       const collection = manager.collection(collectionName, connectionName)
-      return new ModelQueryBuilder(collection, this as any)
+      const queryBuilder = new ModelQueryBuilder(collection, this as any)
+
+      // If transaction client is provided, associate it with the query builder
+      if (options?.client) {
+        queryBuilder.useTransaction(options.client)
+      }
+
+      return queryBuilder as any
     }
 
     // Override the performInsert method
-    BaseModel.prototype['performInsert'] = async function (this: BaseModel) {
+    BaseModel.prototype['performInsert'] = async function (this: BaseModel, session?: any) {
       const constructor = this.constructor as typeof BaseModel
       const collectionName = constructor.getCollectionName()
       const connectionName = constructor.getConnection()
@@ -102,12 +119,14 @@ export default class MongodbProvider {
         delete document._id
       }
 
-      const result = await collection.insertOne(document as any)
+      // Use session if provided (for transactions)
+      const options = session ? { session } : {}
+      const result = await collection.insertOne(document as any, options)
       this._id = result.insertedId
     }
 
     // Override the performUpdate method
-    BaseModel.prototype['performUpdate'] = async function (this: BaseModel) {
+    BaseModel.prototype['performUpdate'] = async function (this: BaseModel, session?: any) {
       if (!this._id) {
         throw new Error('Cannot update model without an ID')
       }
@@ -123,7 +142,9 @@ export default class MongodbProvider {
         return // Nothing to update
       }
 
-      await collection.updateOne({ _id: this._id as any }, { $set: updates })
+      // Use session if provided (for transactions)
+      const options = session ? { session } : {}
+      await collection.updateOne({ _id: this._id as any }, { $set: updates }, options)
     }
   }
 }

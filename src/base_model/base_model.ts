@@ -1,13 +1,14 @@
 import { DateTime } from 'luxon'
-import { ObjectId, WithId, Document } from 'mongodb'
+import { ObjectId, WithId, Document, ClientSession } from 'mongodb'
 import { ModelQueryBuilder } from '../query_builder/model_query_builder.js'
-import { ModelMetadata, DateColumnOptions } from '../types/index.js'
+import { ModelMetadata, DateColumnOptions, ModelOperationOptions } from '../types/index.js'
 import { ModelNotFoundException } from '../exceptions/index.js'
 import type { ComputedProperty } from '../decorators/column.js'
 import {
   CamelCaseNamingStrategy,
   type NamingStrategyContract,
 } from '../naming_strategy/naming_strategy.js'
+import type { MongoTransactionClient } from '../transaction_client.js'
 
 /**
  * Type for create method attributes - includes all properties except methods, relationships, and BaseModel internals
@@ -92,6 +93,11 @@ export class BaseModel {
    */
   public _id?: ObjectId | string
 
+  /**
+   * Transaction client for this model instance
+   */
+  public $trx?: MongoTransactionClient
+
   constructor(attributes: Record<string, any> = {}) {
     this.fill(attributes)
 
@@ -165,6 +171,14 @@ export class BaseModel {
   }
 
   /**
+   * Associate this model instance with a transaction
+   */
+  public useTransaction(trx: MongoTransactionClient): this {
+    this.$trx = trx
+    return this
+  }
+
+  /**
    * Get collection name for the model
    */
   static getCollectionName(): string {
@@ -224,7 +238,8 @@ export class BaseModel {
    * Create a new query builder instance with type-safe relationship loading
    */
   static query<T extends BaseModel = BaseModel>(
-    this: typeof BaseModel & (new (...args: any[]) => T)
+    this: typeof BaseModel & (new (...args: any[]) => T),
+    options?: ModelOperationOptions
   ): ModelQueryBuilder<Document, T> {
     // This would be injected by the service provider
     // For now, we'll throw an error to indicate it needs to be set up
@@ -236,10 +251,11 @@ export class BaseModel {
    */
   static async find<T extends BaseModel = BaseModel>(
     this: typeof BaseModel & (new (...args: any[]) => T),
-    id: string | ObjectId
+    id: string | ObjectId,
+    options?: ModelOperationOptions
   ): Promise<T | null> {
     // Use the query builder which already has hooks integrated
-    return await (this as any).query().where('_id', id).first()
+    return await (this as any).query(options).where('_id', id).first()
   }
 
   /**
@@ -247,9 +263,10 @@ export class BaseModel {
    */
   static async findOrFail<T extends BaseModel>(
     this: typeof BaseModel & (new (...args: any[]) => T),
-    id: string | ObjectId
+    id: string | ObjectId,
+    options?: ModelOperationOptions
   ): Promise<T> {
-    const result = await (this as any).find(id)
+    const result = await (this as any).find(id, options)
     if (!result) {
       throw new ModelNotFoundException(this.name, id)
     }
@@ -321,9 +338,13 @@ export class BaseModel {
    */
   static async create<T extends BaseModel>(
     this: new (...args: any[]) => T,
-    attributes: CreateAttributes<T>
+    attributes: CreateAttributes<T>,
+    options?: ModelOperationOptions
   ): Promise<T> {
     const instance = new this(attributes)
+    if (options?.client) {
+      instance.useTransaction(options.client)
+    }
     await instance.save()
     return instance
   }
@@ -507,8 +528,9 @@ export class BaseModel {
       return false // Operation aborted by hook
     }
 
+    const queryOptions = this.$trx ? { client: this.$trx } : undefined
     const result = await (this.constructor as typeof BaseModel as any)
-      .query()
+      .query(queryOptions)
       .where('_id', this._id)
       .delete()
 

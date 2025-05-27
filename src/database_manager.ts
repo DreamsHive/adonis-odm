@@ -1,6 +1,14 @@
-import { MongoClient, Db, Collection, Document } from 'mongodb'
+import {
+  MongoClient,
+  Db,
+  Collection,
+  Document,
+  ClientSession,
+  TransactionOptions as MongoTransactionOptions,
+} from 'mongodb'
 import { MongoConfig, MongoConnectionConfig, DatabaseManager } from './types/index.js'
 import { ConnectionException, ConfigurationException } from './exceptions/index.js'
+import { MongoTransactionClient, ConcreteMongoTransactionClient } from './transaction_client.js'
 
 /**
  * MongoDB Database Manager
@@ -174,5 +182,52 @@ export class MongoDatabaseManager implements DatabaseManager {
    */
   getConnectionNames(): string[] {
     return Object.keys(this.config.connections)
+  }
+
+  /**
+   * Start a transaction - Manual transaction
+   */
+  public async transaction(options?: MongoTransactionOptions): Promise<MongoTransactionClient>
+  /**
+   * Start a transaction - Managed transaction
+   */
+  public async transaction<TResult = any>(
+    callback: (trx: MongoTransactionClient) => Promise<TResult>,
+    options?: MongoTransactionOptions
+  ): Promise<TResult>
+  /**
+   * Start a transaction - Implementation
+   */
+  public async transaction<TResult = any>(
+    callbackOrOptions?:
+      | ((trx: MongoTransactionClient) => Promise<TResult>)
+      | MongoTransactionOptions,
+    options?: MongoTransactionOptions
+  ): Promise<TResult | MongoTransactionClient> {
+    const actualOptions = typeof callbackOrOptions === 'function' ? options : callbackOrOptions
+    const connectionName = this.config.connection // Get default connection
+    const mongoClient = this.connection(connectionName)
+    const session = mongoClient.startSession()
+
+    const trxClient = new ConcreteMongoTransactionClient(session, this, connectionName)
+
+    if (typeof callbackOrOptions === 'function') {
+      const callback = callbackOrOptions
+      try {
+        // Use MongoDB driver's withTransaction which handles retries for transient errors
+        return await session.withTransaction(async () => {
+          return callback(trxClient)
+        }, actualOptions)
+      } catch (error) {
+        // Rollback is handled by withTransaction on error
+        throw error
+      } finally {
+        session.endSession()
+      }
+    } else {
+      // Manual transaction: Start it, but user must commit/rollback
+      session.startTransaction(actualOptions)
+      return trxClient
+    }
   }
 }

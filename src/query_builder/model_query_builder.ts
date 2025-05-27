@@ -1,4 +1,4 @@
-import { Collection, Document, FindOptions, Sort, WithId, ObjectId } from 'mongodb'
+import { Collection, Document, FindOptions, Sort, WithId, ObjectId, ClientSession } from 'mongodb'
 import { DateTime } from 'luxon'
 import {
   QueryOperator,
@@ -12,6 +12,7 @@ import { ModelNotFoundException } from '../exceptions/index.js'
 import { BaseModel } from '../base_model/base_model.js'
 import type { TypeSafeLoadCallback } from '../types/relationships.js'
 import type { LoadRelationConstraint } from '../types/relationship_inference.js'
+import type { MongoTransactionClient } from '../transaction_client.js'
 
 /**
  * SEAMLESS TYPE-SAFE MODEL QUERY BUILDER - Like AdonisJS Lucid!
@@ -40,11 +41,32 @@ export class ModelQueryBuilder<
   private havingConditions: any = {}
   private orConditions: any[] = []
   private loadRelations: Map<string, (query: any) => void> = new Map()
+  private transactionClient?: MongoTransactionClient
 
   constructor(
     private collection: Collection<T>,
-    private modelConstructor: ModelConstructor
-  ) {}
+    private modelConstructor: ModelConstructor,
+    transactionClient?: MongoTransactionClient
+  ) {
+    if (transactionClient) {
+      this.transactionClient = transactionClient
+    }
+  }
+
+  /**
+   * Associate this query builder with a transaction
+   */
+  public useTransaction(trx: MongoTransactionClient): this {
+    this.transactionClient = trx
+    return this
+  }
+
+  /**
+   * Get the session for transaction operations
+   */
+  private getSession(): ClientSession | undefined {
+    return this.transactionClient?.getSession()
+  }
 
   /**
    * Get the final MongoDB filter object
@@ -588,6 +610,12 @@ export class ModelQueryBuilder<
       options.sort = this.sortOptions as Sort
     }
 
+    // Add session for transaction support
+    const session = this.getSession()
+    if (session) {
+      options.session = session
+    }
+
     // Use potentially modified filters from hooks
     const finalFilters = this.getFinalFilters()
     const result = await this.collection.findOne(finalFilters, options)
@@ -600,6 +628,11 @@ export class ModelQueryBuilder<
     model.hydrateFromDocument(deserializedResult)
     Object.assign(model, deserializedResult)
     Object.setPrototypeOf(model, this.modelConstructor.prototype)
+
+    // Associate model with transaction if present
+    if (this.transactionClient) {
+      model.useTransaction(this.transactionClient)
+    }
 
     // Load relations if specified (eager loading like Lucid's preload)
     if (this.loadRelations.size > 0) {
@@ -647,9 +680,12 @@ export class ModelQueryBuilder<
 
     // Handle distinct queries
     if (this.distinctField) {
+      const session = this.getSession()
+      const distinctOptions = session ? { session } : {}
       const distinctValues = await this.collection.distinct(
         this.distinctField,
-        this.getFinalFilters()
+        this.getFinalFilters(),
+        distinctOptions
       )
       return distinctValues.map((value) => ({
         [this.distinctField!]: value,
@@ -680,6 +716,12 @@ export class ModelQueryBuilder<
       options.skip = this.skipValue
     }
 
+    // Add session for transaction support
+    const session = this.getSession()
+    if (session) {
+      options.session = session
+    }
+
     // Use potentially modified filters from hooks
     const finalFilters = this.getFinalFilters()
     const cursor = this.collection.find(finalFilters, options)
@@ -695,6 +737,13 @@ export class ModelQueryBuilder<
       Object.setPrototypeOf(model, this.modelConstructor.prototype)
       return model
     })
+
+    // Associate models with transaction if present
+    if (this.transactionClient) {
+      modelInstances.forEach((model) => {
+        model.useTransaction(this.transactionClient!)
+      })
+    }
 
     // Load relations if specified (eager loading like Lucid's preload)
     if (this.loadRelations.size > 0) {
@@ -830,6 +879,12 @@ export class ModelQueryBuilder<
       projection: { _id: 1 },
     }
 
+    // Add session for transaction support
+    const session = this.getSession()
+    if (session) {
+      options.session = session
+    }
+
     const cursor = this.collection.find(this.getFinalFilters(), options)
     const results = await cursor.toArray()
 
@@ -851,9 +906,17 @@ export class ModelQueryBuilder<
       serializedData.updatedAt = new Date()
     }
 
-    const result = await this.collection.updateMany(this.getFinalFilters(), {
-      $set: serializedData,
-    })
+    // Add session for transaction support
+    const session = this.getSession()
+    const options = session ? { session } : {}
+
+    const result = await this.collection.updateMany(
+      this.getFinalFilters(),
+      {
+        $set: serializedData,
+      },
+      options
+    )
     return result.modifiedCount || 0
   }
 
@@ -861,7 +924,11 @@ export class ModelQueryBuilder<
    * Delete documents matching the query
    */
   async delete(): Promise<number> {
-    const result = await this.collection.deleteMany(this.getFinalFilters())
+    // Add session for transaction support
+    const session = this.getSession()
+    const options = session ? { session } : {}
+
+    const result = await this.collection.deleteMany(this.getFinalFilters(), options)
     return result.deletedCount || 0
   }
 
@@ -880,6 +947,7 @@ export class ModelQueryBuilder<
     cloned.havingConditions = { ...this.havingConditions }
     cloned.orConditions = [...this.orConditions]
     cloned.loadRelations = new Map(this.loadRelations)
+    cloned.transactionClient = this.transactionClient
     return cloned
   }
 
@@ -1037,6 +1105,9 @@ export class ModelQueryBuilder<
     )
 
     let relatedQuery = RelatedModel.query().whereIn(dbFieldName, foreignKeys)
+    if (this.transactionClient) {
+      relatedQuery = relatedQuery.useTransaction(this.transactionClient)
+    }
 
     // 4. Apply callback constraints if provided
     if (callback && typeof callback === 'function') {
@@ -1106,6 +1177,9 @@ export class ModelQueryBuilder<
     )
 
     let relatedQuery = RelatedModel.query().whereIn(dbFieldName, localKeys)
+    if (this.transactionClient) {
+      relatedQuery = relatedQuery.useTransaction(this.transactionClient)
+    }
 
     // 4. Apply callback constraints if provided
     if (callback && typeof callback === 'function') {
@@ -1175,6 +1249,9 @@ export class ModelQueryBuilder<
     )
 
     let relatedQuery = RelatedModel.query().whereIn(dbFieldName, localKeys)
+    if (this.transactionClient) {
+      relatedQuery = relatedQuery.useTransaction(this.transactionClient)
+    }
 
     // 4. Apply callback constraints if provided
     if (callback && typeof callback === 'function') {

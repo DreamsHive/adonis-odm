@@ -1,5 +1,13 @@
 import { DateTime } from 'luxon'
-import { ObjectId, MongoClient, Db, Collection, Document, WithId } from 'mongodb'
+import {
+  ObjectId,
+  MongoClient,
+  Db,
+  Collection,
+  Document,
+  WithId,
+  TransactionOptions as MongoTransactionOptions,
+} from 'mongodb'
 
 /**
  * Column decorator options
@@ -133,6 +141,18 @@ export interface ModelConstructor {
   getMetadata(): ModelMetadata
   getCollectionName(): string
   getConnection(): string
+}
+
+/**
+ * Transaction options for MongoDB
+ */
+export interface TransactionOptions extends MongoTransactionOptions {}
+
+/**
+ * Model operation options
+ */
+export interface ModelOperationOptions {
+  client?: any // MongoTransactionClient - avoiding circular import
 }
 
 /**

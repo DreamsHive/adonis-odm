@@ -12,12 +12,15 @@ A MongoDB Object Document Mapper (ODM) for AdonisJS v6 that provides a familiar 
 - 📄 **Pagination**: Built-in pagination support
 - 🔗 **Connection Management**: Multiple MongoDB connection support
 - 🛡️ **Type Safety**: Full TypeScript support
+- 💾 **Database Transactions**: Full ACID transaction support with managed and manual modes
 
 ## Installation
 
 ```bash
 npm install mongodb luxon
 ```
+
+**Note**: Database transactions require MongoDB 4.0+ and a replica set or sharded cluster configuration. Transactions are not supported on standalone MongoDB instances.
 
 ## Configuration
 
@@ -427,6 +430,174 @@ user.name = 'Jane'
 console.log(user.$dirty) // { name: 'Jane' }
 ```
 
+### Database Transactions
+
+The MongoDB ODM provides full ACID transaction support, similar to AdonisJS Lucid ORM. Transactions ensure that multiple database operations are executed atomically - either all operations succeed, or all are rolled back.
+
+#### Managed Transactions (Recommended)
+
+Managed transactions automatically handle commit and rollback operations:
+
+```typescript
+import db from '#services/mongodb_service'
+
+// Managed transaction with automatic commit/rollback
+const newUser = await db.transaction(async (trx) => {
+  // Create user within transaction
+  const user = await User.create(
+    {
+      name: 'John Doe',
+      email: 'john@example.com',
+    },
+    { client: trx }
+  )
+
+  // Create related profile within same transaction
+  const profile = await Profile.create(
+    {
+      userId: user._id,
+      firstName: 'John',
+      lastName: 'Doe',
+    },
+    { client: trx }
+  )
+
+  // If any operation fails, entire transaction is rolled back
+  // If all operations succeed, transaction is automatically committed
+  return user
+})
+
+console.log('Transaction completed successfully:', newUser.toJSON())
+```
+
+#### Manual Transactions
+
+For more control, you can manually manage transaction lifecycle:
+
+```typescript
+// Manual transaction with explicit commit/rollback
+const trx = await db.transaction()
+
+try {
+  // Create user within transaction
+  const user = await User.create(
+    {
+      name: 'Jane Smith',
+      email: 'jane@example.com',
+    },
+    { client: trx }
+  )
+
+  // Update user within transaction
+  await User.query({ client: trx }).where('_id', user._id).update({ age: 30 })
+
+  // Manually commit the transaction
+  await trx.commit()
+  console.log('Transaction committed successfully')
+} catch (error) {
+  // Manually rollback on error
+  await trx.rollback()
+  console.error('Transaction rolled back:', error)
+}
+```
+
+#### Model Instance Transactions
+
+You can associate model instances with transactions:
+
+```typescript
+await db.transaction(async (trx) => {
+  const user = new User()
+  user.name = 'Bob Johnson'
+  user.email = 'bob@example.com'
+
+  // Associate model with transaction
+  user.useTransaction(trx)
+  await user.save()
+
+  // Update the same instance
+  user.age = 35
+  await user.save() // Uses the same transaction
+})
+```
+
+#### Query Builder with Transactions
+
+All query builder operations support transactions:
+
+```typescript
+const trx = await db.transaction()
+
+try {
+  // Query with transaction
+  const users = await User.query({ client: trx }).where('isActive', true).all()
+
+  // Update multiple records
+  const updateCount = await User.query({ client: trx })
+    .where('age', '>=', 18)
+    .update({ status: 'adult' })
+
+  // Delete records
+  const deleteCount = await User.query({ client: trx }).where('isVerified', false).delete()
+
+  await trx.commit()
+} catch (error) {
+  await trx.rollback()
+  throw error
+}
+```
+
+#### Transaction Options
+
+You can pass MongoDB-specific transaction options:
+
+```typescript
+// With transaction options
+const result = await db.transaction(
+  async (trx) => {
+    // Your operations here
+    return await User.create({ name: 'Test' }, { client: trx })
+  },
+  {
+    readConcern: { level: 'majority' },
+    writeConcern: { w: 'majority' },
+    readPreference: 'primary',
+  }
+)
+
+// Manual transaction with options
+const trx = await db.transaction({
+  readConcern: { level: 'majority' },
+  writeConcern: { w: 'majority' },
+})
+```
+
+#### Error Handling and Rollback
+
+Transactions automatically rollback on errors:
+
+```typescript
+try {
+  await db.transaction(async (trx) => {
+    await User.create({ name: 'Test User' }, { client: trx })
+
+    // This will cause the entire transaction to rollback
+    throw new Error('Something went wrong')
+  })
+} catch (error) {
+  console.log('Transaction was automatically rolled back')
+  // The user creation above was not persisted
+}
+```
+
+#### Best Practices
+
+1. **Use managed transactions** when possible for automatic error handling
+2. **Keep transactions short** to minimize lock time
+3. **Handle errors appropriately** and always rollback on failure
+4. **Use transactions for related operations** that must succeed or fail together
+5. **Pass transaction client** to all operations that should be part of the transaction
+
 ### Connection Management
 
 You can work with multiple MongoDB connections:
@@ -446,15 +617,15 @@ export default class User extends BaseModel {
 
 #### Static Methods
 
-- `query()` - Create a new query builder
-- `find(id)` - Find by ID
-- `findOrFail(id)` - Find by ID or throw
+- `query(options?)` - Create a new query builder
+- `find(id, options?)` - Find by ID
+- `findOrFail(id, options?)` - Find by ID or throw
 - `findBy(field, value)` - Find by field
 - `findByOrFail(field, value)` - Find by field or throw
 - `first()` - Get first record
 - `firstOrFail()` - Get first record or throw
 - `all()` - Get all records
-- `create(attributes)` - Create new record
+- `create(attributes, options?)` - Create new record
 - `createMany(attributesArray)` - Create multiple records
 - `updateOrCreate(search, update)` - Update existing or create new
 
@@ -465,6 +636,7 @@ export default class User extends BaseModel {
 - `fill(attributes)` - Fill with attributes
 - `merge(attributes)` - Merge attributes
 - `toDocument()` - Convert to plain object
+- `useTransaction(trx)` - Associate model with transaction
 
 #### Instance Properties
 
@@ -472,6 +644,7 @@ export default class User extends BaseModel {
 - `$isLocal` - Whether the model is local only
 - `$dirty` - Object containing modified attributes
 - `$original` - Original values before modifications
+- `$trx` - Associated transaction client (if any)
 
 ### Query Builder
 
@@ -540,6 +713,10 @@ export default class User extends BaseModel {
 - `forPage(page, perPage)` - Set pagination using page and perPage
 - `select(fields)` - Select specific fields
 
+#### Transaction Methods
+
+- `useTransaction(trx)` - Associate query builder with transaction
+
 #### Utility Methods
 
 - `clone()` - Clone the query builder instance
@@ -555,6 +732,34 @@ export default class User extends BaseModel {
 - `ids()` - Get array of IDs
 - `update(data)` - Update matching documents
 - `delete()` - Delete matching documents
+
+### Database Manager
+
+#### Transaction Methods
+
+- `transaction(callback, options?)` - Execute managed transaction
+- `transaction(options?)` - Create manual transaction
+
+#### Connection Methods
+
+- `connection(name?)` - Get MongoDB client connection
+- `db(name?)` - Get database instance
+- `collection(name, connectionName?)` - Get collection instance
+- `connect()` - Connect to all configured MongoDB instances
+- `close()` - Close all connections
+
+### Transaction Client
+
+#### Transaction Control
+
+- `commit()` - Commit the transaction
+- `rollback()` - Rollback/abort the transaction
+
+#### Database Access
+
+- `collection(name)` - Get collection instance within transaction
+- `query(modelConstructor)` - Create query builder within transaction
+- `getSession()` - Get underlying MongoDB ClientSession
 
 ## Examples
 

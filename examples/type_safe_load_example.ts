@@ -218,20 +218,6 @@ async function demonstrateTypeSafeLoad() {
   }
 }
 
-// ========================================
-// Extended Type Safety for Multiple Models
-// ========================================
-
-declare module '../src/query_builder/model_query_builder.js' {
-  interface ModelQueryBuilder<T> {
-    // Profile model relationships
-    load(relation: 'user', callback?: TypeSafeLoadCallback<any>): this
-
-    // Post model relationships
-    load(relation: 'author', callback?: TypeSafeLoadCallback<any>): this
-  }
-}
-
 /**
  * Demonstrate type safety across multiple model types
  */

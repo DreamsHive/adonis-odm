@@ -15,6 +15,8 @@
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down",
     "docker:down:volumes": "docker-compose down -v",
+    "docker:setup": "npm run docker:down:volumes && npm run docker:up && echo '⏳ Waiting for replica set initialization...' && sleep 30 && npm run test:connection",
+    "test:connection": "node test-connection.js",
     "docker:logs": "docker-compose logs -f",
     "lint": "eslint .",
     "format": "prettier --write .",
