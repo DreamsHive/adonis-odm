@@ -107,7 +107,7 @@ export class CamelCaseNamingStrategy implements NamingStrategyContract {
    * Convert property name to database column name
    * By default, converts camelCase to snake_case
    */
-  columnName(model: any, propertyName: string): string {
+  columnName(_model: any, propertyName: string): string {
     return StringHelper.snakeCase(propertyName)
   }
 
@@ -115,7 +115,7 @@ export class CamelCaseNamingStrategy implements NamingStrategyContract {
    * Convert property name to serialized name for JSON output
    * By default, converts camelCase to snake_case
    */
-  serializedName(model: any, propertyName: string): string {
+  serializedName(_model: any, propertyName: string): string {
     return StringHelper.snakeCase(propertyName)
   }
 
@@ -157,7 +157,7 @@ export class CamelCaseNamingStrategy implements NamingStrategyContract {
   /**
    * Generate pivot table name for many-to-many relationships
    */
-  relationPivotTable(relation: 'manyToMany', model: any, relatedModel: any): string {
+  relationPivotTable(_relation: 'manyToMany', model: any, relatedModel: any): string {
     const modelName = model.name || model.constructor.name
     const relatedModelName = relatedModel.name || relatedModel.constructor.name
 
@@ -167,7 +167,7 @@ export class CamelCaseNamingStrategy implements NamingStrategyContract {
   /**
    * Generate pivot foreign key name for many-to-many relationships
    */
-  relationPivotForeignKey(relation: 'manyToMany', model: any): string {
+  relationPivotForeignKey(_relation: 'manyToMany', model: any): string {
     const modelName = model.name || model.constructor.name
     const primaryKey = model.primaryKey || '_id'
     return StringHelper.snakeCase(`${modelName}_${primaryKey}`)
@@ -199,7 +199,7 @@ export class SnakeCaseNamingStrategy implements NamingStrategyContract {
    * Convert property name to database column name
    * Keeps snake_case as-is
    */
-  columnName(model: any, propertyName: string): string {
+  columnName(_model: any, propertyName: string): string {
     return StringHelper.snakeCase(propertyName)
   }
 
@@ -207,7 +207,7 @@ export class SnakeCaseNamingStrategy implements NamingStrategyContract {
    * Convert property name to serialized name for JSON output
    * Keeps snake_case as-is
    */
-  serializedName(model: any, propertyName: string): string {
+  serializedName(_model: any, propertyName: string): string {
     return StringHelper.snakeCase(propertyName)
   }
 
@@ -248,7 +248,7 @@ export class SnakeCaseNamingStrategy implements NamingStrategyContract {
   /**
    * Generate pivot table name for many-to-many relationships
    */
-  relationPivotTable(relation: 'manyToMany', model: any, relatedModel: any): string {
+  relationPivotTable(_relation: 'manyToMany', model: any, relatedModel: any): string {
     const modelName = model.name || model.constructor.name
     const relatedModelName = relatedModel.name || relatedModel.constructor.name
 
@@ -258,7 +258,7 @@ export class SnakeCaseNamingStrategy implements NamingStrategyContract {
   /**
    * Generate pivot foreign key name for many-to-many relationships
    */
-  relationPivotForeignKey(relation: 'manyToMany', model: any): string {
+  relationPivotForeignKey(_relation: 'manyToMany', model: any): string {
     const modelName = model.name || model.constructor.name
     const primaryKey = model.primaryKey || '_id'
     return StringHelper.snakeCase(`${modelName}_${primaryKey}`)

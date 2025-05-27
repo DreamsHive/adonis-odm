@@ -10,8 +10,11 @@ import {
 } from '../types/index.js'
 import { ModelNotFoundException } from '../exceptions/index.js'
 import { BaseModel } from '../base_model/base_model.js'
-import type { TypeSafeLoadCallback } from '../types/relationships.js'
-import type { LoadRelationConstraint } from '../types/relationship_inference.js'
+import type {
+  LoadRelationConstraint,
+  EmbedRelationConstraint,
+  ExtractEmbeddedModelClass,
+} from '../types/relationship_inference.js'
 import type { MongoTransactionClient } from '../transaction_client.js'
 
 /**
@@ -41,6 +44,7 @@ export class ModelQueryBuilder<
   private havingConditions: any = {}
   private orConditions: any[] = []
   private loadRelations: Map<string, (query: any) => void> = new Map()
+  private embedRelations: Map<string, (query: any) => void> = new Map()
   private transactionClient?: MongoTransactionClient
 
   constructor(
@@ -567,19 +571,56 @@ export class ModelQueryBuilder<
   }
 
   /**
-   * TYPE-SAFE LOAD METHOD - Seamless Type Safety Like AdonisJS Lucid!
+   * TYPE-SAFE LOAD METHOD - Eager Load Referenced Relationships!
    *
-   * This method provides automatic type inference for relationship loading callbacks.
+   * This method provides automatic type inference for REFERENCED relationship loading.
    * The callback parameter is automatically typed based on the relationship being loaded.
+   * Only supports REFERENCED relationships (HasOne, HasMany, BelongsTo).
+   * Embedded relationships are excluded because they need to be "embedded" instead.
    *
-   * @param relation - The relationship property name (with IntelliSense support)
+   * Example usage:
+   * ```typescript
+   * const users = await User.query().load('profile', (profileQuery) => {
+   *   profileQuery.where('isActive', true).orderBy('createdAt', 'desc')
+   * })
+   * ```
+   *
+   * @param relation - The REFERENCED relationship property name (with IntelliSense support)
    * @param callback - Optional callback to modify the relationship query
    */
   load<K extends LoadRelationConstraint<TModel>>(
     relation: K,
-    callback?: TypeSafeLoadCallback
+    callback?: (query: ModelQueryBuilder<any, BaseModel>) => void
   ): this {
     this.loadRelations.set(String(relation), callback || (() => {}))
+    return this
+  }
+
+  /**
+   * TYPE-SAFE EMBED METHOD - Query Embedded Documents Directly!
+   *
+   * This method provides automatic type inference for EMBEDDED document querying.
+   * The callback parameter is automatically typed based on the embedded relationship being queried.
+   * Only supports EMBEDDED relationships (EmbeddedSingle, EmbeddedMany).
+   * Referenced relationships are excluded because they need to be "loaded" instead.
+   *
+   * Example usage:
+   * ```typescript
+   * const users = await UserWithEnhancedEmbeddedProfile.query().embed('profiles', (profileQuery) => {
+   *   profileQuery.where('age', '>', 25).orderBy('age', 'desc').limit(5)
+   * })
+   * ```
+   *
+   * @param relation - The EMBEDDED relationship property name (with IntelliSense support)
+   * @param callback - Optional callback to filter/paginate the embedded documents
+   */
+  embed<K extends EmbedRelationConstraint<TModel>>(
+    relation: K,
+    callback?: (
+      query: import('../embedded/embedded_query_builder.js').EmbeddedQueryBuilder<any>
+    ) => void
+  ): this {
+    this.embedRelations.set(String(relation), callback || (() => {}))
     return this
   }
 
@@ -637,6 +678,11 @@ export class ModelQueryBuilder<
     // Load relations if specified (eager loading like Lucid's preload)
     if (this.loadRelations.size > 0) {
       await this.loadReferencedDocuments([model])
+    }
+
+    // Process embedded relations if specified
+    if (this.embedRelations.size > 0) {
+      await this.processEmbeddedDocuments([model])
     }
 
     // Execute afterFind hook
@@ -748,6 +794,11 @@ export class ModelQueryBuilder<
     // Load relations if specified (eager loading like Lucid's preload)
     if (this.loadRelations.size > 0) {
       await this.loadReferencedDocuments(modelInstances)
+    }
+
+    // Process embedded relations if specified
+    if (this.embedRelations.size > 0) {
+      await this.processEmbeddedDocuments(modelInstances)
     }
 
     // Execute afterFetch hook
@@ -947,6 +998,7 @@ export class ModelQueryBuilder<
     cloned.havingConditions = { ...this.havingConditions }
     cloned.orConditions = [...this.orConditions]
     cloned.loadRelations = new Map(this.loadRelations)
+    cloned.embedRelations = new Map(this.embedRelations)
     cloned.transactionClient = this.transactionClient
     return cloned
   }
@@ -1054,7 +1106,18 @@ export class ModelQueryBuilder<
       const metadata = this.modelConstructor.getMetadata()
       const relationColumn = metadata.columns.get(relationName)
 
-      if (!relationColumn || !relationColumn.isReference) {
+      if (!relationColumn) {
+        continue // Skip if column doesn't exist
+      }
+
+      // Handle embedded documents
+      if (relationColumn.isEmbedded) {
+        await this.loadEmbeddedDocuments(results, relationName, relationColumn, callback)
+        continue
+      }
+
+      // Handle referenced documents
+      if (!relationColumn.isReference) {
         continue // Skip if not a relationship
       }
 
@@ -1063,8 +1126,8 @@ export class ModelQueryBuilder<
       if (relationColumn.model === 'deferred') {
         const tempInstance = new this.modelConstructor()
         // Access the relationship property to trigger lazy resolution
-        const relationshipProxy = (tempInstance as any)[relationName]
-        // This should have updated the relationColumn.model
+        // This triggers lazy resolution and updates relationColumn.model
+        void (tempInstance as any)[relationName]
       }
 
       // Determine relationship type and load accordingly
@@ -1294,6 +1357,115 @@ export class ModelQueryBuilder<
           // Update the array proxy
           relationshipProxy.length = 0
           relationshipProxy.push(...relatedDocs)
+        }
+      }
+    }
+  }
+
+  /**
+   * Load embedded documents with query capabilities
+   * For embedded documents, we apply the callback constraints to filter the embedded data
+   */
+  private async loadEmbeddedDocuments(
+    results: WithId<T>[],
+    relationName: string,
+    _relationColumn: any,
+    callback?: (query: any) => void
+  ): Promise<void> {
+    // For embedded documents, we need to apply the callback constraints
+    // to filter the embedded data if it's an array (many type)
+
+    for (const result of results) {
+      // Convert result to a proper model instance if it isn't already
+      if (!((result as any) instanceof BaseModel)) {
+        const model = new this.modelConstructor()
+        model.hydrateFromDocument(result)
+        Object.setPrototypeOf(result, model.constructor.prototype)
+        Object.assign(result, model)
+      }
+
+      // Access the embedded property to ensure it's initialized
+      const embeddedData = (result as any)[relationName]
+
+      // If it's an embedded many type and has query capabilities, apply callback
+      if (embeddedData && typeof embeddedData.query === 'function' && callback) {
+        // Create a query builder for the embedded data
+        const embeddedQuery = embeddedData.query()
+
+        // Apply the callback constraints
+        callback(embeddedQuery)
+
+        // Execute the query to filter the embedded data
+        const filteredData = embeddedQuery.get()
+
+        // Update the embedded data with filtered results
+        // Note: This doesn't modify the original data, just provides filtered access
+        // In a real implementation, you might want to cache this or handle it differently
+        embeddedData._filteredResults = filteredData
+      }
+    }
+  }
+
+  /**
+   * Process embedded documents with query capabilities
+   * This method applies the embed() callback constraints to filter embedded documents
+   */
+  private async processEmbeddedDocuments(results: WithId<T>[]): Promise<void> {
+    if (results.length === 0) {
+      return
+    }
+
+    // For each embedded relationship to process
+    for (const [relationName, callback] of this.embedRelations) {
+      // Get the model metadata to find embedded relationship information
+      const metadata = this.modelConstructor.getMetadata()
+      const relationColumn = metadata.columns.get(relationName)
+
+      if (!relationColumn || !relationColumn.isEmbedded) {
+        continue // Skip if not an embedded relationship
+      }
+
+      // Process each result
+      for (const result of results) {
+        // Convert result to a proper model instance if it isn't already
+        if (!((result as any) instanceof BaseModel)) {
+          const model = new this.modelConstructor()
+          model.hydrateFromDocument(result)
+          Object.setPrototypeOf(result, model.constructor.prototype)
+          Object.assign(result, model)
+        }
+
+        // Access the embedded property to ensure it's initialized
+        const embeddedData = (result as any)[relationName]
+
+        // Apply callback constraints for embedded many types (arrays)
+        if (embeddedData && typeof embeddedData.query === 'function' && callback) {
+          // Create a query builder for the embedded data
+          const embeddedQuery = embeddedData.query()
+
+          // Apply the callback constraints
+          callback(embeddedQuery)
+
+          // Execute the query to get filtered results
+          const filteredData = embeddedQuery.get()
+
+          // Replace the embedded data with filtered results
+          // This modifies the actual embedded array to show only filtered items
+          if (Array.isArray(embeddedData)) {
+            // Clear the existing array and add filtered items
+            embeddedData.length = 0
+            embeddedData.push(...filteredData)
+          }
+        }
+
+        // For single embedded documents, we could apply validation or transformation
+        // but typically single embedded documents don't need query filtering
+        else if (embeddedData && relationColumn.embeddedType === 'single') {
+          // For single embedded documents, we could create a temporary query builder
+          // and apply the callback for validation purposes, but this is less common
+          console.log(
+            `⚠️ Embed callback applied to single embedded document '${relationName}' - this is unusual`
+          )
         }
       }
     }

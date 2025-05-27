@@ -1,6 +1,5 @@
 import {
   Collection,
-  Db,
   Document,
   ClientSession,
   TransactionOptions as MongoTransactionOptions,

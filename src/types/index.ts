@@ -5,7 +5,6 @@ import {
   Db,
   Collection,
   Document,
-  WithId,
   TransactionOptions as MongoTransactionOptions,
 } from 'mongodb'
 
@@ -25,7 +24,17 @@ export interface ColumnOptions {
   isArray?: boolean
   isBelongsTo?: boolean
   serializeAs?: string | null
+  embeddedType?: 'single' | 'many'
+  embeddedModel?: () => typeof import('../base_model/base_model.js').BaseModel
 }
+
+// Export embedded types
+export type {
+  EmbeddedSingle,
+  EmbeddedMany,
+  EmbeddedOptions,
+  EmbeddedQueryBuilder,
+} from './embedded.js'
 
 /**
  * Date column decorator options

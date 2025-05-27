@@ -17,6 +17,9 @@ export default class UserWithReferencedProfile extends BaseModel {
   declare email: string
 
   @column()
+  declare name: string
+
+  @column()
   declare age: number
 
   @column({ serializeAs: null })

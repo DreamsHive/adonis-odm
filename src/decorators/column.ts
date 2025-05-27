@@ -6,6 +6,7 @@ import {
   createBelongsToProxy,
 } from '../relationships/relationship_proxies.js'
 import { MODEL_METADATA } from '../base_model/base_model.js'
+import { EmbeddedSingleProxy, EmbeddedManyProxy } from '../embedded/embedded_proxies.js'
 
 // Export hook decorators
 export {
@@ -193,21 +194,77 @@ column.dateTime = function (options: DateColumnOptions = {}) {
 }
 
 /**
- * Embedded document decorator
+ * Embedded document decorator - Enhanced version
+ * Supports both legacy inline definitions and new model-based definitions
  */
-column.embedded = function (options: ColumnOptions = {}) {
+column.embedded = function (
+  modelOrOptions?: (() => typeof import('../base_model/base_model.js').BaseModel) | ColumnOptions,
+  typeOrOptions?: 'single' | 'many' | ColumnOptions,
+  options?: ColumnOptions
+) {
   return function (target: any, propertyKey: string) {
     const metadata = getMetadata(target)
-    const columnOptions: ColumnOptions = {
-      ...options,
-      isEmbedded: true,
+    let columnOptions: ColumnOptions
+
+    // Handle different parameter combinations
+    if (typeof modelOrOptions === 'function') {
+      // New syntax: @column.embedded(() => Profile, 'single')
+      columnOptions = {
+        ...options,
+        isEmbedded: true,
+        embeddedModel: modelOrOptions,
+        embeddedType: typeOrOptions as 'single' | 'many',
+      }
+    } else {
+      // Legacy syntax: @column.embedded() or @column.embedded(options)
+      columnOptions = {
+        ...(modelOrOptions as ColumnOptions),
+        isEmbedded: true,
+      }
     }
+
     metadata.columns.set(propertyKey, columnOptions)
 
     // Create property descriptor to track changes
     const privateKey = `_${propertyKey}`
     Object.defineProperty(target, propertyKey, {
       get: function () {
+        // If using new model-based syntax, initialize proxy if needed
+        if (columnOptions.embeddedModel && !this[privateKey]) {
+          const ModelClass = columnOptions.embeddedModel()
+
+          if (columnOptions.embeddedType === 'many') {
+            this[privateKey] = new EmbeddedManyProxy(this, propertyKey, ModelClass)
+          } else {
+            this[privateKey] = new EmbeddedSingleProxy(this, propertyKey, ModelClass)
+          }
+        }
+
+        // For single embedded documents, return the actual embedded instance, not the proxy
+        // For array embedded documents, return the proxy itself (which extends Array)
+        if (columnOptions.embeddedModel && this[privateKey]) {
+          if (columnOptions.embeddedType === 'single') {
+            if (typeof this[privateKey].getValue === 'function') {
+              return this[privateKey].getValue()
+            } else {
+              return this[privateKey]
+            }
+          } else if (columnOptions.embeddedType === 'many') {
+            // Check if the proxy has lost its methods (became a plain array)
+            if (
+              Array.isArray(this[privateKey]) &&
+              typeof (this[privateKey] as any).query !== 'function'
+            ) {
+              // Recreate the proxy with the existing data
+              const ModelClass = columnOptions.embeddedModel()
+              const existingData = Array.from(this[privateKey])
+              this[privateKey] = new EmbeddedManyProxy(this, propertyKey, ModelClass, existingData)
+            }
+            // For arrays, return the proxy directly (it extends Array and has the query() method)
+            return this[privateKey]
+          }
+        }
+
         return this[privateKey]
       },
       set: function (value: any) {
@@ -218,7 +275,24 @@ column.embedded = function (options: ColumnOptions = {}) {
           value = columnOptions.deserialize(value)
         }
 
-        this[privateKey] = value
+        // Handle model-based embedded documents
+        if (columnOptions.embeddedModel) {
+          const ModelClass = columnOptions.embeddedModel()
+
+          if (columnOptions.embeddedType === 'many') {
+            if (!this[privateKey] || !(this[privateKey] instanceof EmbeddedManyProxy)) {
+              this[privateKey] = new EmbeddedManyProxy(this, propertyKey, ModelClass, value)
+            } else {
+              this[privateKey].setItems(value || [])
+            }
+          } else {
+            // For single embedded documents, always create a new proxy
+            this[privateKey] = new EmbeddedSingleProxy(this, propertyKey, ModelClass, value)
+          }
+        } else {
+          // Legacy behavior for inline definitions
+          this[privateKey] = value
+        }
 
         // Track dirty attributes if value changed
         if (oldValue !== value) {

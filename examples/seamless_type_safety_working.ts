@@ -2,7 +2,6 @@ import { BaseModel } from '../src/base_model/base_model.js'
 import { column, hasOne, hasMany, belongsTo } from '../src/decorators/column.js'
 import { DateTime } from 'luxon'
 import type { HasOne, HasMany, BelongsTo } from '../src/types/relationships.js'
-import type { ModelQueryBuilder } from '../src/query_builder/model_query_builder.js'
 
 /**
  * SEAMLESS TYPE SAFETY - WORKING SOLUTION

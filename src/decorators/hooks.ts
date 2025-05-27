@@ -4,7 +4,7 @@ import { BaseModel } from '../base_model/base_model.js'
  * Create a hook decorator for a specific hook type
  */
 function createHookDecorator(hookType: string) {
-  return function (target: any, propertyKey: string, descriptor: PropertyDescriptor) {
+  return function (target: any, propertyKey: string, _descriptor: PropertyDescriptor) {
     // target is the static side of the class (the constructor function)
     const modelClass = target as typeof BaseModel
     const metadata = modelClass.getMetadata()

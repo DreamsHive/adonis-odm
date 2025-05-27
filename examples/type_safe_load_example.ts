@@ -1,12 +1,7 @@
 import { BaseModel } from '../src/base_model/base_model.js'
 import { column, hasOne, hasMany, belongsTo } from '../src/decorators/column.js'
 import { DateTime } from 'luxon'
-import type {
-  HasOne,
-  HasMany,
-  BelongsTo,
-  TypeSafeLoadCallback,
-} from '../src/types/relationships.js'
+import type { HasOne, HasMany, BelongsTo } from '../src/types/relationships.js'
 
 /**
  * Type-Safe Load Method Example

@@ -23,7 +23,7 @@ import type { HasOne, HasMany, BelongsTo } from '../types/relationships.js'
  */
 export function createHasOneProxy<T extends typeof BaseModel>(
   relatedModel: () => T,
-  options: {
+  _options: {
     foreignKey?: string
     localKey?: string
   } = {}
@@ -104,7 +104,7 @@ export function createHasOneProxy<T extends typeof BaseModel>(
       return undefined
     },
 
-    set(target: any, prop: string | symbol, value: any): boolean {
+    set(_target: any, prop: string | symbol, value: any): boolean {
       // Allow setting the related model
       if (prop === 'related') {
         related = value
@@ -121,7 +121,7 @@ export function createHasOneProxy<T extends typeof BaseModel>(
       return false
     },
 
-    has(target: any, prop: string | symbol): boolean {
+    has(_target: any, prop: string | symbol): boolean {
       // Check relationship methods first
       if (
         prop === 'related' ||
@@ -142,7 +142,7 @@ export function createHasOneProxy<T extends typeof BaseModel>(
       return false
     },
 
-    ownKeys(target: any): ArrayLike<string | symbol> {
+    ownKeys(_target: any): ArrayLike<string | symbol> {
       const keys = ['related', 'load', 'create', 'save', 'isLoaded', 'query']
 
       if (related) {
@@ -152,7 +152,7 @@ export function createHasOneProxy<T extends typeof BaseModel>(
       return keys
     },
 
-    getOwnPropertyDescriptor(target: any, prop: string | symbol) {
+    getOwnPropertyDescriptor(_target: any, prop: string | symbol) {
       if (
         prop === 'related' ||
         prop === 'load' ||
@@ -183,7 +183,7 @@ export function createHasOneProxy<T extends typeof BaseModel>(
  */
 export function createHasManyProxy<T extends typeof BaseModel>(
   relatedModel: () => T,
-  options: {
+  _options: {
     foreignKey?: string
     localKey?: string
   } = {}
@@ -192,7 +192,7 @@ export function createHasManyProxy<T extends typeof BaseModel>(
   let isLoaded = false
 
   const proxy = new Proxy([] as any, {
-    get(target: any, prop: string | symbol, receiver: any): any {
+    get(_target: any, prop: string | symbol, _receiver: any): any {
       // Handle relationship-specific methods first
       if (prop === 'related') {
         return relatedArray
@@ -282,22 +282,68 @@ export function createHasManyProxy<T extends typeof BaseModel>(
         }
       }
 
-      // Handle array index access
+      if (prop === 'find') {
+        return (
+          callback: (item: InstanceType<T>, index: number) => boolean
+        ): InstanceType<T> | undefined => {
+          return relatedArray.find(callback)
+        }
+      }
+
+      if (prop === 'push') {
+        return (...items: InstanceType<T>[]) => {
+          return relatedArray.push(...items)
+        }
+      }
+
+      if (prop === 'pop') {
+        return () => {
+          return relatedArray.pop()
+        }
+      }
+
+      if (prop === 'shift') {
+        return () => {
+          return relatedArray.shift()
+        }
+      }
+
+      if (prop === 'unshift') {
+        return (...items: InstanceType<T>[]) => {
+          return relatedArray.unshift(...items)
+        }
+      }
+
+      if (prop === 'slice') {
+        return (start?: number, end?: number) => {
+          return relatedArray.slice(start, end)
+        }
+      }
+
+      if (prop === 'splice') {
+        return (start: number, deleteCount?: number, ...items: InstanceType<T>[]) => {
+          return relatedArray.splice(start, deleteCount || 0, ...items)
+        }
+      }
+
+      // Handle numeric indices
       if (typeof prop === 'string' && /^\d+$/.test(prop)) {
         const index = Number.parseInt(prop, 10)
         return relatedArray[index]
       }
 
-      // Handle special symbols and methods
-      if (typeof prop === 'symbol') {
-        if (prop === Symbol.iterator) {
-          return function* () {
-            for (const item of relatedArray) {
-              yield item
-            }
+      // Handle Symbol.iterator for for...of loops
+      if (prop === Symbol.iterator) {
+        return function* () {
+          for (const item of relatedArray) {
+            yield item
           }
         }
-        return Reflect.get(relatedArray, prop, receiver)
+      }
+
+      // Handle special symbols and methods
+      if (typeof prop === 'symbol') {
+        return Reflect.get(relatedArray, prop)
       }
 
       // Handle inspection methods
@@ -305,34 +351,25 @@ export function createHasManyProxy<T extends typeof BaseModel>(
         return () => `[HasMany Relationship: ${relatedArray.length} items]`
       }
 
-      // Forward other array methods to the related array
-      if (prop in Array.prototype) {
-        const value = (relatedArray as any)[prop]
-        if (typeof value === 'function') {
-          return value.bind(relatedArray)
-        }
-        return value
-      }
-
       return undefined
     },
 
-    set(target: any, prop: string | symbol, value: any): boolean {
+    set(_target: any, prop: string | symbol, value: any): boolean {
       // Allow setting the related array
       if (prop === 'related') {
-        relatedArray = value || []
-        isLoaded = value !== null && value !== undefined
+        relatedArray = Array.isArray(value) ? value : []
+        isLoaded = true
         return true
       }
 
-      // Handle array index setting
+      // Handle numeric indices
       if (typeof prop === 'string' && /^\d+$/.test(prop)) {
         const index = Number.parseInt(prop, 10)
         relatedArray[index] = value
         return true
       }
 
-      // Handle length setting
+      // Handle length property
       if (prop === 'length') {
         relatedArray.length = value
         return true
@@ -341,57 +378,65 @@ export function createHasManyProxy<T extends typeof BaseModel>(
       return false
     },
 
-    has(target: any, prop: string | symbol): boolean {
+    has(_target: any, prop: string | symbol): boolean {
       // Check relationship methods first
       if (
         prop === 'related' ||
         prop === 'load' ||
         prop === 'create' ||
         prop === 'createMany' ||
+        prop === 'save' ||
         prop === 'saveMany' ||
         prop === 'isLoaded' ||
         prop === 'query' ||
-        prop === 'save'
+        prop === 'length' ||
+        prop === 'forEach' ||
+        prop === 'map' ||
+        prop === 'filter' ||
+        prop === 'find' ||
+        prop === 'push' ||
+        prop === 'pop' ||
+        prop === 'shift' ||
+        prop === 'unshift' ||
+        prop === 'slice' ||
+        prop === 'splice'
       ) {
         return true
       }
 
-      // Check array properties
-      if (prop === 'length' || prop === 'forEach' || prop === 'map' || prop === 'filter') {
-        return true
-      }
-
-      // Check array index
+      // Check numeric indices
       if (typeof prop === 'string' && /^\d+$/.test(prop)) {
         const index = Number.parseInt(prop, 10)
         return index >= 0 && index < relatedArray.length
       }
 
-      // Check array methods
-      if (prop in Array.prototype) {
-        return true
-      }
-
       return false
     },
 
-    ownKeys(target: any): ArrayLike<string | symbol> {
+    ownKeys(_target: any): ArrayLike<string | symbol> {
       const keys = [
         'related',
         'load',
         'create',
         'createMany',
+        'save',
         'saveMany',
         'isLoaded',
         'query',
-        'save',
         'length',
         'forEach',
         'map',
         'filter',
+        'find',
+        'push',
+        'pop',
+        'shift',
+        'unshift',
+        'slice',
+        'splice',
       ]
 
-      // Add array indices
+      // Add numeric indices
       for (let i = 0; i < relatedArray.length; i++) {
         keys.push(i.toString())
       }
@@ -399,7 +444,32 @@ export function createHasManyProxy<T extends typeof BaseModel>(
       return keys
     },
 
-    getOwnPropertyDescriptor(target: any, prop: string | symbol) {
+    getOwnPropertyDescriptor(_target: any, prop: string | symbol) {
+      if (
+        prop === 'related' ||
+        prop === 'load' ||
+        prop === 'create' ||
+        prop === 'createMany' ||
+        prop === 'save' ||
+        prop === 'saveMany' ||
+        prop === 'isLoaded' ||
+        prop === 'query' ||
+        prop === 'length' ||
+        prop === 'forEach' ||
+        prop === 'map' ||
+        prop === 'filter' ||
+        prop === 'find' ||
+        prop === 'push' ||
+        prop === 'pop' ||
+        prop === 'shift' ||
+        prop === 'unshift' ||
+        prop === 'slice' ||
+        prop === 'splice'
+      ) {
+        return { enumerable: true, configurable: true }
+      }
+
+      // Handle numeric indices
       if (typeof prop === 'string' && /^\d+$/.test(prop)) {
         const index = Number.parseInt(prop, 10)
         if (index >= 0 && index < relatedArray.length) {
@@ -407,11 +477,7 @@ export function createHasManyProxy<T extends typeof BaseModel>(
         }
       }
 
-      if (prop === 'length') {
-        return { enumerable: false, configurable: false, writable: true }
-      }
-
-      return { enumerable: true, configurable: true }
+      return undefined
     },
   })
 
@@ -422,37 +488,37 @@ export function createHasManyProxy<T extends typeof BaseModel>(
  * SEAMLESS BELONGSTO PROXY
  *
  * Creates a proxy that transparently forwards property access to the related model
- * when loaded, providing seamless access like: post.user.name
+ * when loaded, providing seamless access like: post.author.name
  */
 export function createBelongsToProxy<T extends typeof BaseModel>(
   relatedModel: () => T,
-  options: {
+  _options: {
     foreignKey?: string
     localKey?: string
   } = {}
 ): BelongsTo<T> {
-  let relatedInstance: InstanceType<T> | null = null
+  let related: InstanceType<T> | null = null
   let isLoaded = false
 
   const proxy = new Proxy({} as BelongsTo<T>, {
     get(target: any, prop: string | symbol, receiver: any): any {
       // Handle relationship-specific methods first
       if (prop === 'related') {
-        return relatedInstance
+        return related
       }
 
       if (prop === 'load') {
         return async (): Promise<InstanceType<T> | null> => {
           // TODO: Implement actual loading logic
           isLoaded = true
-          return relatedInstance
+          return related
         }
       }
 
       if (prop === 'associate') {
         return async (model: InstanceType<T>): Promise<InstanceType<T>> => {
           // TODO: Implement associate logic
-          relatedInstance = model
+          related = model
           return model
         }
       }
@@ -460,7 +526,7 @@ export function createBelongsToProxy<T extends typeof BaseModel>(
       if (prop === 'dissociate') {
         return async (): Promise<void> => {
           // TODO: Implement dissociate logic
-          relatedInstance = null
+          related = null
         }
       }
 
@@ -483,17 +549,17 @@ export function createBelongsToProxy<T extends typeof BaseModel>(
 
       // Handle inspection methods
       if (prop === 'toString' || prop === 'valueOf' || prop === 'inspect') {
-        return () => `[BelongsTo Relationship: ${relatedInstance ? 'loaded' : 'not loaded'}]`
+        return () => `[BelongsTo Relationship: ${related ? 'loaded' : 'not loaded'}]`
       }
 
       // SEAMLESS PROPERTY FORWARDING - THE MAGIC!
       // If the relationship is loaded, forward property access to the related model
-      if (relatedInstance && prop in relatedInstance) {
-        const value = (relatedInstance as any)[prop]
+      if (related && prop in related) {
+        const value = (related as any)[prop]
 
         // If it's a function, bind it to the related model
         if (typeof value === 'function') {
-          return value.bind(relatedInstance)
+          return value.bind(related)
         }
 
         return value
@@ -503,24 +569,24 @@ export function createBelongsToProxy<T extends typeof BaseModel>(
       return undefined
     },
 
-    set(target: any, prop: string | symbol, value: any): boolean {
+    set(_target: any, prop: string | symbol, value: any): boolean {
       // Allow setting the related model
       if (prop === 'related') {
-        relatedInstance = value
-        isLoaded = value !== null && value !== undefined
+        related = value
+        isLoaded = value !== null && value !== undefined // Mark as loaded when related data is set
         return true
       }
 
       // Forward property setting to the related model if loaded
-      if (relatedInstance && typeof prop === 'string') {
-        ;(relatedInstance as any)[prop] = value
+      if (related && typeof prop === 'string') {
+        ;(related as any)[prop] = value
         return true
       }
 
       return false
     },
 
-    has(target: any, prop: string | symbol): boolean {
+    has(_target: any, prop: string | symbol): boolean {
       // Check relationship methods first
       if (
         prop === 'related' ||
@@ -534,24 +600,24 @@ export function createBelongsToProxy<T extends typeof BaseModel>(
       }
 
       // Check if property exists on related model
-      if (relatedInstance) {
-        return prop in relatedInstance
+      if (related) {
+        return prop in related
       }
 
       return false
     },
 
-    ownKeys(target: any): ArrayLike<string | symbol> {
+    ownKeys(_target: any): ArrayLike<string | symbol> {
       const keys = ['related', 'load', 'associate', 'dissociate', 'isLoaded', 'query']
 
-      if (relatedInstance) {
-        keys.push(...Object.keys(relatedInstance))
+      if (related) {
+        keys.push(...Object.keys(related))
       }
 
       return keys
     },
 
-    getOwnPropertyDescriptor(target: any, prop: string | symbol) {
+    getOwnPropertyDescriptor(_target: any, prop: string | symbol) {
       if (
         prop === 'related' ||
         prop === 'load' ||
@@ -563,8 +629,8 @@ export function createBelongsToProxy<T extends typeof BaseModel>(
         return { enumerable: true, configurable: true }
       }
 
-      if (relatedInstance && prop in relatedInstance) {
-        return Object.getOwnPropertyDescriptor(relatedInstance, prop)
+      if (related && prop in related) {
+        return Object.getOwnPropertyDescriptor(related, prop)
       }
 
       return undefined

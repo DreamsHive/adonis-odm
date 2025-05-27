@@ -28,16 +28,13 @@ services:
     image: mongo-express:1.0.0
     container_name: adonis_mongo_express
     restart: unless-stopped
-    ports:
-      - '8081:8081'
+    network_mode: host
     environment:
-      ME_CONFIG_MONGODB_URL: mongodb://mongodb-primary:27017/
+      ME_CONFIG_MONGODB_URL: mongodb://localhost:27017/adonis_mongo
       ME_CONFIG_BASICAUTH_USERNAME: admin
       ME_CONFIG_BASICAUTH_PASSWORD: admin123
     depends_on:
       - mongo-init
-    networks:
-      - mongo-network
 
 volumes:
   mongodb_data:

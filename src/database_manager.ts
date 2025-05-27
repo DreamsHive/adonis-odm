@@ -3,7 +3,6 @@ import {
   Db,
   Collection,
   Document,
-  ClientSession,
   TransactionOptions as MongoTransactionOptions,
 } from 'mongodb'
 import { MongoConfig, MongoConnectionConfig, DatabaseManager } from './types/index.js'

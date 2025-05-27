@@ -11,8 +11,10 @@ A MongoDB Object Document Mapper (ODM) for AdonisJS v6 that provides a familiar 
 - 🔄 **Model Lifecycle**: Track model state with `$isPersisted`, `$dirty`, etc.
 - 📄 **Pagination**: Built-in pagination support
 - 🔗 **Connection Management**: Multiple MongoDB connection support
-- 🛡️ **Type Safety**: Full TypeScript support
+- 🛡️ **Type Safety**: Full TypeScript support with IntelliSense
 - 💾 **Database Transactions**: Full ACID transaction support with managed and manual modes
+- 📦 **Embedded Documents**: Type-safe embedded document support with full CRUD operations
+- 🔗 **Relationships**: Type-safe referenced and embedded relationships with query builders
 
 ## Installation
 
@@ -120,6 +122,283 @@ export default class User extends BaseModel {
   @column.dateTime({ autoCreate: true, autoUpdate: true })
   declare updatedAt: DateTime
 }
+```
+
+### Embedded Documents
+
+The ODM provides full support for embedded documents with type safety and CRUD operations.
+
+#### Defining Embedded Documents
+
+```typescript
+import { BaseModel } from '../src/base_model/base_model.js'
+import { column } from '../src/decorators/column.js'
+import { DateTime } from 'luxon'
+
+// Embedded document model
+export default class Profile extends BaseModel {
+  @column()
+  declare firstName: string
+
+  @column()
+  declare lastName: string
+
+  @column()
+  declare bio?: string
+
+  @column()
+  declare age: number
+
+  @column()
+  declare phoneNumber?: string
+
+  // Computed property
+  get fullName(): string {
+    return `${this.firstName} ${this.lastName}`
+  }
+}
+
+// Main model with embedded documents
+export default class User extends BaseModel {
+  @column({ isPrimary: true })
+  declare _id: string
+
+  @column()
+  declare email: string
+
+  @column()
+  declare age: number
+
+  // Single embedded document
+  @column.embedded(() => Profile)
+  declare profile?: Profile
+
+  // Array of embedded documents
+  @column.embedded(() => Profile, { isArray: true })
+  declare profiles?: Profile[]
+
+  @column.dateTime({ autoCreate: true })
+  declare createdAt: DateTime
+
+  @column.dateTime({ autoCreate: true, autoUpdate: true })
+  declare updatedAt: DateTime
+
+  // Computed properties
+  get fullName(): string | null {
+    return this.profile?.fullName || null
+  }
+
+  get allProfileNames(): string[] {
+    return this.profiles?.map((p) => p.fullName) || []
+  }
+
+  // Helper methods
+  getYoungProfiles(maxAge: number): Profile[] {
+    return this.profiles?.filter((p) => p.age < maxAge) || []
+  }
+
+  getProfilesByBio(bioKeyword: string): Profile[] {
+    return this.profiles?.filter((p) => p.bio?.includes(bioKeyword)) || []
+  }
+}
+```
+
+#### Creating Records with Embedded Documents
+
+```typescript
+// Create user with embedded profile (single)
+const user = await User.create({
+  email: 'john@example.com',
+  age: 30,
+  profile: {
+    firstName: 'John',
+    lastName: 'Doe',
+    bio: 'Software developer',
+    age: 30,
+    phoneNumber: '+1234567890',
+  },
+})
+
+// Create user with multiple embedded profiles
+const user = await User.create({
+  email: 'jane@example.com',
+  age: 28,
+  profiles: [
+    {
+      firstName: 'Jane',
+      lastName: 'Smith',
+      bio: 'Technical Lead',
+      age: 28,
+    },
+    {
+      firstName: 'Jane',
+      lastName: 'Smith',
+      bio: 'Architect',
+      age: 28,
+    },
+  ],
+})
+```
+
+#### Type-Safe Property Access
+
+```typescript
+const user = await User.findOrFail('507f1f77bcf86cd799439011')
+
+// ✅ Full IntelliSense support - NO CASTS NEEDED!
+if (user.profile) {
+  const firstName = user.profile.firstName // ✅ Type: string
+  const lastName = user.profile.lastName // ✅ Type: string
+  const bio = user.profile.bio // ✅ Type: string | undefined
+  const age = user.profile.age // ✅ Type: number
+  const fullName = user.profile.fullName // ✅ Type: string (computed property)
+}
+
+// Array operations with full type safety
+if (user.profiles) {
+  // ✅ Standard array methods work with full type safety
+  const allBios = user.profiles.map((profile) => profile.bio) // ✅ Type: (string | undefined)[]
+
+  const leadProfiles = user.profiles.filter(
+    (profile) => profile.bio?.includes('Lead') // ✅ Type-safe optional chaining
+  )
+
+  // ✅ Type-safe forEach with IntelliSense
+  user.profiles.forEach((profile, index) => {
+    // ✅ Full IntelliSense on profile parameter
+    console.log(`${index + 1}. ${profile.firstName} ${profile.lastName} - ${profile.bio}`)
+  })
+}
+```
+
+#### CRUD Operations on Embedded Documents
+
+```typescript
+const user = await User.findOrFail('507f1f77bcf86cd799439011')
+
+// Single embedded document operations
+if (user.profile) {
+  // Update properties
+  user.profile.bio = 'Senior Software Engineer'
+  user.profile.phoneNumber = '+1-555-9999'
+
+  // Save the embedded document
+  await user.profile.save()
+}
+
+// Array embedded document operations
+if (user.profiles) {
+  // Update individual items
+  const firstProfile = user.profiles[0]
+  firstProfile.bio = 'Senior Technical Lead'
+  await firstProfile.save()
+
+  // Create new embedded document
+  const newProfile = user.profiles.create({
+    firstName: 'John',
+    lastName: 'Doe',
+    bio: 'Innovation Lead',
+    age: 32,
+  })
+  await newProfile.save()
+
+  // Delete embedded document
+  await firstProfile.delete()
+}
+```
+
+#### Querying Embedded Documents
+
+The ODM provides a powerful query builder for embedded documents with full type safety:
+
+```typescript
+const user = await User.findOrFail('507f1f77bcf86cd799439011')
+
+if (user.profiles) {
+  // Type-safe query builder with IntelliSense
+  const seniorProfiles = user.profiles
+    .query()
+    .where('bio', 'like', 'Senior') // ✅ Type-safe field names
+    .where('age', '>=', 30) // ✅ Type-safe operators
+    .orderBy('age', 'desc') // ✅ Type-safe sorting
+    .get()
+
+  // Complex filtering
+  const experiencedDevelopers = user.profiles
+    .query()
+    .whereAll([
+      { field: 'age', operator: '>=', value: 30 },
+      { field: 'bio', operator: 'like', value: 'Developer' },
+    ])
+    .get()
+
+  // Pagination for large datasets
+  const paginatedResult = user.profiles.query().orderBy('age', 'desc').paginate(1, 5) // page 1, 5 per page
+
+  console.log(paginatedResult.data) // Array of profiles
+  console.log(paginatedResult.pagination) // Pagination metadata
+
+  // Search across multiple fields
+  const searchResults = user.profiles.query().search('Engineer', ['bio', 'firstName']).get()
+
+  // Aggregation operations
+  const ageStats = user.profiles.query().aggregate('age')
+  console.log(ageStats) // { count, sum, avg, min, max }
+
+  // Distinct values
+  const uniqueAges = user.profiles.query().distinct('age')
+
+  // Grouping
+  const ageGroups = user.profiles.query().groupBy('age')
+}
+```
+
+#### Loading Embedded Documents with Filtering
+
+Use the `.embed()` method to load embedded documents with type-safe filtering:
+
+```typescript
+// Load all embedded documents
+const users = await User.query().embed('profiles').where('email', 'like', '%@company.com').all()
+
+// Load with filtering callback - Full IntelliSense support!
+const users = await User.query()
+  .embed('profiles', (profileQuery) => {
+    profileQuery
+      .where('age', '>', 25) // ✅ Type-safe field names
+      .where('bio', 'like', 'Engineer') // ✅ Type-safe operators
+      .orderBy('age', 'desc') // ✅ Type-safe sorting
+      .limit(5) // ✅ Pagination support
+  })
+  .where('email', 'like', '%@company.com')
+  .all()
+
+// Complex embedded filtering
+const users = await User.query()
+  .embed('profiles', (profileQuery) => {
+    profileQuery
+      .whereIn('age', [25, 30, 35])
+      .whereNotNull('bio')
+      .whereLike('bio', '%Lead%')
+      .orderBy('firstName', 'asc')
+  })
+  .all()
+```
+
+### Referenced Relationships
+
+For traditional referenced relationships, use the `.load()` method:
+
+```typescript
+// Load referenced relationships
+const users = await User.query().load('profile').where('isActive', true).all()
+
+// Load with filtering callback
+const users = await User.query()
+  .load('profile', (profileQuery) => {
+    profileQuery.where('isPublic', true).orderBy('updatedAt', 'desc')
+  })
+  .all()
 ```
 
 ### Basic CRUD Operations
@@ -383,6 +662,18 @@ declare name: string
 
 @column({ isPrimary: true })
 declare _id: string
+```
+
+#### Embedded Columns
+
+```typescript
+// Single embedded document
+@column.embedded(() => Profile)
+declare profile?: Profile
+
+// Array of embedded documents
+@column.embedded(() => Profile, { isArray: true })
+declare profiles?: Profile[]
 ```
 
 #### Date Columns
@@ -713,6 +1004,11 @@ export default class User extends BaseModel {
 - `forPage(page, perPage)` - Set pagination using page and perPage
 - `select(fields)` - Select specific fields
 
+#### Relationship Loading
+
+- `load(relationName, callback?)` - Load referenced relationships with optional filtering
+- `embed(relationName, callback?)` - Load embedded documents with optional filtering
+
 #### Transaction Methods
 
 - `useTransaction(trx)` - Associate query builder with transaction
@@ -732,6 +1028,85 @@ export default class User extends BaseModel {
 - `ids()` - Get array of IDs
 - `update(data)` - Update matching documents
 - `delete()` - Delete matching documents
+
+### EmbeddedQueryBuilder
+
+The `EmbeddedQueryBuilder` provides comprehensive querying capabilities for embedded documents with full type safety:
+
+#### Basic Query Methods
+
+- `where(field, value)` - Add where condition
+- `where(field, operator, value)` - Add where condition with operator
+- `andWhere(field, value)` - Alias for where method
+- `whereNot(field, value)` - Add where not condition
+- `orWhere(field, value)` - Add OR where condition
+- `orWhereNot(field, value)` - Add OR where not condition
+
+#### Pattern Matching
+
+- `whereLike(field, pattern)` - Case-sensitive pattern matching
+- `whereILike(field, pattern)` - Case-insensitive pattern matching
+
+#### Array Operations
+
+- `whereIn(field, values)` - Where field is in array
+- `whereNotIn(field, values)` - Where field is not in array
+- `orWhereIn(field, values)` - OR where field is in array
+- `orWhereNotIn(field, values)` - OR where field is not in array
+
+#### Range Operations
+
+- `whereBetween(field, [min, max])` - Where field is between values
+- `whereNotBetween(field, [min, max])` - Where field is not between values
+- `orWhereBetween(field, [min, max])` - OR where field is between values
+- `orWhereNotBetween(field, [min, max])` - OR where field is not between values
+
+#### Null and Existence Checks
+
+- `whereNull(field)` - Where field is null
+- `whereNotNull(field)` - Where field is not null
+- `whereExists(field)` - Where field exists
+- `whereNotExists(field)` - Where field does not exist
+
+#### Advanced Filtering
+
+- `whereAll(conditions)` - Add multiple AND conditions
+- `whereAny(conditions)` - Add multiple OR conditions
+- `whereDateBetween(field, startDate, endDate)` - Filter by date range
+- `whereArrayContains(field, value)` - Filter by array contains value
+- `whereRegex(field, pattern, flags?)` - Filter by regex pattern
+
+#### Sorting and Limiting
+
+- `orderBy(field, direction)` - Add sorting
+- `limit(count)` - Limit results
+- `skip(count)` - Skip results
+- `offset(count)` - Alias for skip method
+- `forPage(page, perPage)` - Set pagination using page and perPage
+
+#### Search and Selection
+
+- `search(term, fields?)` - Search across multiple fields
+- `select(...fields)` - Select specific fields
+
+#### Execution Methods
+
+- `get()` - Get all filtered results
+- `first()` - Get first result
+- `count()` - Count matching documents
+- `exists()` - Check if any results exist
+- `paginate(page, perPage)` - Get paginated results with metadata
+
+#### Aggregation Methods
+
+- `distinct(field)` - Get distinct values for field
+- `groupBy(field)` - Group results by field value
+- `aggregate(field)` - Get aggregated statistics (sum, avg, min, max, count)
+
+#### Utility Methods
+
+- `tap(callback)` - Execute callback on results
+- `clone()` - Clone the query builder instance
 
 ### Database Manager
 

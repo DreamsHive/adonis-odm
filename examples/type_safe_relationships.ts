@@ -208,6 +208,10 @@ async function typeSafeRelationshipsExample() {
     // ✅ Seamless: Multiple relationships can be chained
     const usersWithData = await User.query().load('profile').load('posts').all()
 
+    console.log(`Found ${usersWithProfile.length} users with profiles`)
+    console.log(`Found ${usersWithPosts.length} users with posts`)
+    console.log(`Found ${usersWithData.length} users with both`)
+
     console.log('✅ Basic seamless loading completed')
 
     // ========================================
@@ -256,6 +260,7 @@ async function typeSafeRelationshipsExample() {
       .all()
 
     console.log('✅ Nested seamless loading completed')
+    console.log('✅ Users with nested data:', usersWithNestedData.length)
 
     // ========================================
     // 4. Real-World Usage Patterns

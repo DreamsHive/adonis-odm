@@ -1,9 +1,9 @@
 import { DateTime } from 'luxon'
-import { ObjectId, WithId, Document, ClientSession } from 'mongodb'
+import { ObjectId, WithId, Document } from 'mongodb'
 import { ModelQueryBuilder } from '../query_builder/model_query_builder.js'
 import { ModelMetadata, DateColumnOptions, ModelOperationOptions } from '../types/index.js'
 import { ModelNotFoundException } from '../exceptions/index.js'
-import type { ComputedProperty } from '../decorators/column.js'
+
 import {
   CamelCaseNamingStrategy,
   type NamingStrategyContract,
@@ -14,17 +14,8 @@ import type { MongoTransactionClient } from '../transaction_client.js'
  * Type for create method attributes - includes all properties except methods, relationships, and BaseModel internals
  * Following AdonisJS Lucid pattern: computed properties and all data types are included
  */
-type CreateAttributes<T extends BaseModel> = {
-  [K in keyof T as T[K] extends (...args: any[]) => any
-    ? never
-    : K extends keyof BaseModel
-      ? never
-      : K extends '_id'
-        ? never
-        : T[K] extends { load: (...args: any[]) => any } // Exclude relationship proxies
-          ? never
-          : K]?: T[K]
-}
+// Import the proper creation type that handles both embedded and referenced documents
+import type { CreateAttributes } from '../types/embedded.js'
 
 /**
  * Symbol to store model metadata
@@ -239,7 +230,7 @@ export class BaseModel {
    */
   static query<T extends BaseModel = BaseModel>(
     this: typeof BaseModel & (new (...args: any[]) => T),
-    options?: ModelOperationOptions
+    _options?: ModelOperationOptions
   ): ModelQueryBuilder<Document, T> {
     // This would be injected by the service provider
     // For now, we'll throw an error to indicate it needs to be set up
@@ -647,9 +638,18 @@ export class BaseModel {
       if (dbColumnName === '_id') {
         this._id = processedValue
       } else if (columnOptions && !columnOptions.isReference) {
-        // If this is a column with a property descriptor, use the private key
-        const privateKey = `_${propertyName}`
-        ;(this as any)[privateKey] = processedValue
+        // Special handling for embedded documents - use the property setter to initialize proxies
+        if (columnOptions.isEmbedded && columnOptions.embeddedModel) {
+          // Use the property setter to ensure proxy initialization
+          ;(this as any)[propertyName] = processedValue
+        } else if (columnOptions.isEmbedded) {
+          // Even if embeddedModel is not set, try using the setter for embedded properties
+          ;(this as any)[propertyName] = processedValue
+        } else {
+          // For regular columns, use the private key
+          const privateKey = `_${propertyName}`
+          ;(this as any)[privateKey] = processedValue
+        }
       } else {
         // For properties without metadata, use the property name (could be camelCase or snake_case)
         ;(this as any)[propertyName] = processedValue
@@ -688,6 +688,9 @@ export class BaseModel {
 
         if (columnOptions?.serialize) {
           document[columnName] = columnOptions.serialize(value)
+        } else if (columnOptions?.isEmbedded && value && typeof value.toDocument === 'function') {
+          // Handle embedded documents by calling their toDocument method
+          document[columnName] = value.toDocument()
         } else {
           document[columnName] = value
         }
@@ -724,6 +727,9 @@ export class BaseModel {
 
         if (columnOptions?.serialize) {
           document[columnName] = columnOptions.serialize(value)
+        } else if (columnOptions?.isEmbedded && value && typeof value.toDocument === 'function') {
+          // Handle embedded documents by calling their toDocument method
+          document[columnName] = value.toDocument()
         } else {
           document[columnName] = value
         }
