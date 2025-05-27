@@ -34,7 +34,6 @@ export class EmbeddedModelInstance<T extends typeof BaseModel> {
 
     // Override the instance's save method to prevent it from trying to save itself
     // This is crucial for embedded documents that don't have their own _id
-    const originalSave = this._instance.save.bind(this._instance)
     this._instance.save = async () => {
       console.log('⚠️ Embedded instance save() called - redirecting to parent save')
       return this.save()

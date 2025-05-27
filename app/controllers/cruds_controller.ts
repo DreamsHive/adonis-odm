@@ -1008,7 +1008,7 @@ export default class CrudsController {
 
       const usersWithoutFilter = await UserWithEnhancedEmbeddedProfile.query()
         .where('email', 'embed-test@example.com')
-        .embed('profiles', (profileQuery) => {})
+        .embed('profiles')
         .all()
 
       console.log(`✅ Found ${usersWithoutFilter.length} users`)

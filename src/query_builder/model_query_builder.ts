@@ -13,7 +13,6 @@ import { BaseModel } from '../base_model/base_model.js'
 import type {
   LoadRelationConstraint,
   EmbedRelationConstraint,
-  ExtractEmbeddedModelClass,
 } from '../types/relationship_inference.js'
 import type { MongoTransactionClient } from '../transaction_client.js'
 

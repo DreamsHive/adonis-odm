@@ -158,6 +158,9 @@ export default class Profile extends BaseModel {
   }
 }
 
+// Import embedded types
+import { EmbeddedSingle, EmbeddedMany } from '../src/types/embedded.js'
+
 // Main model with embedded documents
 export default class User extends BaseModel {
   @column({ isPrimary: true })
@@ -170,12 +173,12 @@ export default class User extends BaseModel {
   declare age: number
 
   // Single embedded document
-  @column.embedded(() => Profile)
-  declare profile?: Profile
+  @column.embedded(() => Profile, 'single')
+  declare profile?: EmbeddedSingle<typeof Profile>
 
   // Array of embedded documents
-  @column.embedded(() => Profile, { isArray: true })
-  declare profiles?: Profile[]
+  @column.embedded(() => Profile, 'many')
+  declare profiles?: EmbeddedMany<typeof Profile>
 
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
@@ -193,11 +196,11 @@ export default class User extends BaseModel {
   }
 
   // Helper methods
-  getYoungProfiles(maxAge: number): Profile[] {
+  getYoungProfiles(maxAge: number): InstanceType<typeof Profile>[] {
     return this.profiles?.filter((p) => p.age < maxAge) || []
   }
 
-  getProfilesByBio(bioKeyword: string): Profile[] {
+  getProfilesByBio(bioKeyword: string): InstanceType<typeof Profile>[] {
     return this.profiles?.filter((p) => p.bio?.includes(bioKeyword)) || []
   }
 }
@@ -668,12 +671,12 @@ declare _id: string
 
 ```typescript
 // Single embedded document
-@column.embedded(() => Profile)
-declare profile?: Profile
+@column.embedded(() => Profile, 'single')
+declare profile?: EmbeddedSingle<typeof Profile>
 
 // Array of embedded documents
-@column.embedded(() => Profile, { isArray: true })
-declare profiles?: Profile[]
+@column.embedded(() => Profile, 'many')
+declare profiles?: EmbeddedMany<typeof Profile>
 ```
 
 #### Date Columns
@@ -1138,15 +1141,13 @@ The `EmbeddedQueryBuilder` provides comprehensive querying capabilities for embe
 
 ## Examples
 
-Check the `examples/basic_usage.ts` file for a comprehensive example of how to use the MongoDB ODM.
+The MongoDB ODM provides comprehensive functionality as demonstrated in the CRUD controller at `app/controllers/cruds_controller.ts`. This controller showcases all the key features including:
 
-## Testing
-
-The ODM includes comprehensive tests. Run them with:
-
-```bash
-npm test
-```
+- Type-safe embedded document operations
+- Advanced query building with the `.embed()` method
+- CRUD operations on both single and array embedded documents
+- Transaction support
+- Relationship loading and filtering
 
 ## Contributing
 
