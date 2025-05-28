@@ -167,8 +167,6 @@ node ace mongodb:status
 node ace mongodb:info
 ```
 
-> **Note**: Model generation and database commands are planned for future releases. Currently, you need to create models manually by extending `BaseModel`.
-
 ## Usage
 
 ### Database Service

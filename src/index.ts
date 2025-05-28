@@ -81,7 +81,13 @@ export type {
   DatabaseManager,
 } from './types/index.js'
 
-export type { EmbeddedSingle, EmbeddedMany, EmbeddedOptions } from './types/embedded.js'
+export type {
+  EmbeddedSingle,
+  EmbeddedMany,
+  EmbeddedOptions,
+  EmbeddedCreationAttributes,
+  CreateAttributes,
+} from './types/embedded.js'
 
 export type {
   LoadRelationConstraint,

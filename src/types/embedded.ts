@@ -192,22 +192,38 @@ export type EmbeddedManyCreation<T extends typeof BaseModel> = EmbeddedCreationD
 /**
  * Helper type to extract creation attributes for embedded documents
  * This provides proper type safety while being permissive for creation
+ *
+ * This type extracts all declared properties from the model class, excluding:
+ * - BaseModel internal properties (starting with $)
+ * - Primary key (_id) and timestamp fields (createdAt, updatedAt)
+ * - Methods and computed properties (getters)
+ * - Relationship properties
  */
 export type EmbeddedCreationAttributes<T extends typeof BaseModel> = {
   [K in keyof InstanceType<T> as K extends keyof BaseModel
     ? never
-    : K extends '_id' | 'createdAt' | 'updatedAt'
+    : // Exclude primary key and timestamps
+      K extends '_id' | 'createdAt' | 'updatedAt'
       ? never
-      : K extends `$${string}`
+      : // Exclude internal properties starting with $
+        K extends `$${string}`
         ? never
-        : InstanceType<T>[K] extends (...args: any[]) => any
+        : // Exclude methods and functions
+          InstanceType<T>[K] extends (...args: any[]) => any
           ? never
-          : K]?: InstanceType<T>[K]
+          : // Exclude relationship properties (they have load methods)
+            InstanceType<T>[K] extends { load: (...args: any[]) => any }
+            ? never
+            : // Include all other properties
+              K]?: InstanceType<T>[K] // Exclude BaseModel internal properties
 }
 
 /**
  * Standard creation attributes for models with embedded document support
  * This type automatically handles both embedded and referenced documents
+ *
+ * For embedded documents, it extracts the actual model properties for type safety
+ * For regular properties, it includes them as-is
  */
 export type CreateAttributes<T extends BaseModel> = {
   [K in keyof T as T[K] extends (...args: any[]) => any
