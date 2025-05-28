@@ -58,25 +58,72 @@ export interface ModelMetadata {
  * MongoDB connection configuration
  */
 export interface MongoConnectionConfig {
+  /** The client type - must be 'mongodb' */
   client: 'mongodb'
+
+  /** Connection details */
   connection: {
+    /** MongoDB connection URL (e.g., 'mongodb://localhost:27017/mydb') */
     url?: string
+
+    /** MongoDB host (alternative to url) */
     host?: string
+
+    /** MongoDB port (alternative to url) */
     port?: number
+
+    /** Database name (alternative to url) */
     database?: string
+
+    /** MongoDB username for authentication */
+    username?: string
+
+    /** MongoDB password for authentication */
+    password?: string
+
+    /** Additional MongoDB connection options */
     options?: Record<string, any>
   }
+
+  /** Use new URL parser (deprecated, defaults to true) */
   useNewUrlParser?: boolean
+
+  /** Use unified topology (deprecated, defaults to true) */
   useUnifiedTopology?: boolean
 }
 
 /**
- * MongoDB ODM configuration
+ * ODM configuration for NoSQL databases
+ *
+ * @example
+ * ```typescript
+ * import { defineConfig } from 'adonis-odm'
+ *
+ * export default defineConfig({
+ *   connection: 'mongodb',
+ *   connections: {
+ *     mongodb: {
+ *       client: 'mongodb',
+ *       connection: {
+ *         url: env.get('MONGODB_URL'),
+ *       },
+ *     },
+ *   },
+ * })
+ * ```
  */
-export interface MongoConfig {
+export interface OdmConfig {
+  /** Default connection name to use */
   connection: string
+
+  /** Named connection configurations */
   connections: Record<string, MongoConnectionConfig>
 }
+
+/**
+ * @deprecated Use OdmConfig instead. Will be removed in future versions.
+ */
+export interface MongoConfig extends OdmConfig {}
 
 /**
  * Query builder filter operators

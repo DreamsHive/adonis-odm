@@ -32,10 +32,6 @@ export async function executeHooks<M extends BaseModel, Q extends ModelQueryBuil
       }
 
       if (hookType.startsWith('before') && result === false) {
-        // Log or indicate which hook aborted, if necessary for debugging
-        console.warn(
-          `Hook ${methodName} on ${modelClass.name} for ${hookType} returned false, aborting operation.`
-        )
         return false // Operation aborted by hook
       }
     }

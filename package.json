@@ -1,37 +1,111 @@
 {
-  "name": "adonis-mongo",
-  "version": "0.0.0",
-  "private": true,
+  "name": "adonis-odm",
+  "version": "0.1.0",
+  "private": false,
   "type": "module",
-  "license": "UNLICENSED",
-  "scripts": {
-    "start": "node bin/server.js",
-    "build": "node ace build",
-    "dev": "node ace serve --hmr",
-    "docker:up": "docker-compose up -d",
-    "docker:down": "docker-compose down",
-    "docker:down:volumes": "docker-compose down -v",
-    "docker:logs": "docker-compose logs -f",
-    "lint": "eslint .",
-    "format": "prettier --write .",
-    "typecheck": "tsc --noEmit"
+  "license": "MIT",
+  "description": "A comprehensive MongoDB ODM for AdonisJS with Lucid-style API, type-safe relationships, embedded documents, and transaction support",
+  "keywords": [
+    "adonisjs",
+    "mongodb",
+    "odm",
+    "database",
+    "typescript",
+    "lucid",
+    "relationships",
+    "embedded",
+    "transactions"
+  ],
+  "author": "Your Name <your.email@example.com>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DreamsHive/adonis-odm.git"
   },
-  "imports": {
-    "#controllers/*": "./app/controllers/*.js",
-    "#exceptions/*": "./app/exceptions/*.js",
-    "#models/*": "./app/models/*.js",
-    "#mails/*": "./app/mails/*.js",
-    "#services/*": "./app/services/*.js",
-    "#listeners/*": "./app/listeners/*.js",
-    "#events/*": "./app/events/*.js",
-    "#middleware/*": "./app/middleware/*.js",
-    "#validators/*": "./app/validators/*.js",
-    "#providers/*": "./providers/*.js",
-    "#policies/*": "./app/policies/*.js",
-    "#abilities/*": "./app/abilities/*.js",
-    "#database/*": "./database/*.js",
-    "#start/*": "./start/*.js",
-    "#config/*": "./config/*.js"
+  "bugs": {
+    "url": "https://github.com/DreamsHive/adonis-odm/issues"
+  },
+  "main": "./build/src/index.js",
+  "types": "./build/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./build/src/index.d.ts",
+      "import": "./build/src/index.js",
+      "require": "./build/src/index.cjs"
+    },
+    "./providers": {
+      "types": "./build/providers/index.d.ts",
+      "import": "./build/providers/index.js",
+      "require": "./build/providers/index.cjs"
+    },
+    "./providers/mongodb_provider": {
+      "types": "./build/providers/mongodb_provider.d.ts",
+      "import": "./build/providers/mongodb_provider.js",
+      "require": "./build/providers/mongodb_provider.cjs"
+    },
+    "./commands": {
+      "types": "./build/commands/index.d.ts",
+      "import": "./build/commands/index.js",
+      "require": "./build/commands/index.cjs"
+    },
+    "./configure": {
+      "types": "./build/configure.d.ts",
+      "import": "./build/configure.js",
+      "require": "./build/configure.cjs"
+    },
+    "./types": {
+      "types": "./build/src/types/index.d.ts",
+      "import": "./build/src/types/index.js",
+      "require": "./build/src/types/index.cjs"
+    },
+    "./services/db": {
+      "types": "./build/services/db.d.ts",
+      "import": "./build/services/db.js"
+    }
+  },
+  "files": [
+    "build/src/",
+    "build/providers/",
+    "build/commands/",
+    "build/services/",
+    "build/stubs/",
+    "build/configure.js",
+    "build/configure.d.ts",
+    "README.md",
+    "LICENSE.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "clean": "del-cli build",
+    "copy:templates": "copyfiles \"stubs/**/*.stub\" build",
+    "precompile": "npm run lint && npm run clean",
+    "compile": "npm run build && npm run copy:templates",
+    "prepublishOnly": "npm run compile",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "tsc --noEmit",
+    "test": "node --loader ts-node-maintained/esm --test tests/basic.test.ts tests/commands.test.ts",
+    "test:integration": "node --loader ts-node-maintained/esm --test tests/integration.test.ts",
+    "test:all": "node --loader ts-node-maintained/esm --test tests/*.test.ts",
+    "test:watch": "node --loader ts-node-maintained/esm --test --watch tests/*.test.ts",
+    "test:coverage": "c8 node --loader ts-node-maintained/esm --test tests/*.test.ts",
+    "validate:gitignore": "node scripts/validate-gitignore.js",
+    "validate:package": "npm pack --dry-run",
+    "validate:exports": "node -e \"console.log('Testing exports...'); const pkg = require('./package.json'); console.log('Exports:', Object.keys(pkg.exports));\"",
+    "dev": "node --loader ts-node-maintained/esm --watch examples/bin/server.ts",
+    "dev:debug": "node --loader ts-node-maintained/esm --inspect --watch examples/bin/server.ts",
+    "docs:api": "typedoc --options typedoc.json",
+    "docs:serve": "npx http-server docs/api -p 8080",
+    "release:dry": "npm version --no-git-tag-version",
+    "release:patch": "npm version patch",
+    "release:minor": "npm version minor",
+    "release:major": "npm version major",
+    "security:audit": "npm audit --audit-level=moderate || echo 'Note: Using bun.lock - npm audit may not work. Consider using bun audit when available.'",
+    "security:fix": "npm audit fix || echo 'Note: Using bun.lock - npm audit fix may not work.'",
+    "deps:check": "npm outdated",
+    "deps:update": "npm update",
+    "deps:update:major": "npx npm-check-updates -u"
   },
   "devDependencies": {
     "@adonisjs/assembler": "^7.8.2",
@@ -41,11 +115,17 @@
     "@swc/core": "1.11.24",
     "@types/luxon": "^3.6.2",
     "@types/node": "^22.15.18",
+    "audit-ci": "^7.1.0",
+    "c8": "^10.1.2",
+    "copyfiles": "^2.4.1",
+    "del-cli": "^6.0.0",
     "eslint": "^9.26.0",
     "hot-hook": "^0.4.0",
+    "http-server": "^14.1.1",
     "pino-pretty": "^13.0.0",
     "prettier": "^3.5.3",
     "ts-node-maintained": "^10.9.5",
+    "typedoc": "^0.26.11",
     "typescript": "~5.8"
   },
   "dependencies": {
@@ -55,11 +135,9 @@
     "mongodb": "^6.16.0",
     "reflect-metadata": "^0.2.2"
   },
-  "hotHook": {
-    "boundaries": [
-      "./app/controllers/**/*.ts",
-      "./app/middleware/*.ts"
-    ]
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
   },
   "eslintConfig": {
     "extends": "@adonisjs/eslint-config/app"

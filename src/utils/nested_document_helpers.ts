@@ -1,5 +1,6 @@
 import { BaseModel } from '../base_model/base_model.js'
 import { ObjectId } from 'mongodb'
+import { DatabaseOperationException, RelationshipException } from '../exceptions/index.js'
 
 /**
  * Utility functions for handling nested documents efficiently
@@ -15,36 +16,56 @@ export class NestedDocumentHelpers {
     ReferenceModel: typeof BaseModel & (new (...args: any[]) => R),
     targetField?: string
   ): Promise<void> {
-    // Extract all reference IDs
-    const referenceIds = models
-      .map((model) => (model as any)[referenceField])
-      .filter((id) => id !== null && id !== undefined) as (ObjectId | string)[]
+    try {
+      // Extract all reference IDs
+      const referenceIds = models
+        .map((model) => (model as any)[referenceField])
+        .filter((id) => id !== null && id !== undefined) as (ObjectId | string)[]
 
-    if (referenceIds.length === 0) return
+      if (referenceIds.length === 0) return
 
-    // Load all referenced documents in a single query
-    const referencedDocs = await (ReferenceModel as any)
-      .query()
-      .where('_id', 'in', referenceIds)
-      .all()
-
-    // Create a map for quick lookup
-    const referencedMap = new Map<string, R>()
-    referencedDocs.forEach((doc: R) => {
-      referencedMap.set(doc._id!.toString(), doc)
-    })
-
-    // Assign referenced documents to models
-    const field = targetField || referenceField.replace(/Id$/, '')
-    models.forEach((model) => {
-      const refId = (model as any)[referenceField]
-      if (refId) {
-        const referencedDoc = referencedMap.get(refId.toString())
-        if (referencedDoc) {
-          ;(model as any)[field] = referencedDoc
-        }
+      // Load all referenced documents in a single query
+      let referencedDocs: R[]
+      try {
+        referencedDocs = await (ReferenceModel as any)
+          .query()
+          .where('_id', 'in', referenceIds)
+          .all()
+      } catch (error) {
+        throw new DatabaseOperationException(
+          `bulk load references for ${ReferenceModel.name}`,
+          error as Error
+        )
       }
-    })
+
+      // Create a map for quick lookup
+      const referencedMap = new Map<string, R>()
+      referencedDocs.forEach((doc: R) => {
+        referencedMap.set(doc._id!.toString(), doc)
+      })
+
+      // Assign referenced documents to models
+      const field = targetField || referenceField.replace(/Id$/, '')
+      models.forEach((model) => {
+        const refId = (model as any)[referenceField]
+        if (refId) {
+          const referencedDoc = referencedMap.get(refId.toString())
+          if (referencedDoc) {
+            ;(model as any)[field] = referencedDoc
+          }
+        }
+      })
+    } catch (error) {
+      // Re-throw DatabaseOperationException as-is, wrap others
+      if (error instanceof DatabaseOperationException) {
+        throw error
+      }
+      throw new RelationshipException(
+        `bulk load ${referenceField}`,
+        models[0]?.constructor.name || 'Unknown',
+        error as Error
+      )
+    }
   }
 
   /**
@@ -257,7 +278,6 @@ export class NestedDocumentHelpers {
   ) {
     if (isEmbedded) {
       // For embedded documents, use MongoDB aggregation
-      const collection = (ModelClass as any).getCollectionName()
       // This would require access to the raw MongoDB collection
       // Implementation depends on your database manager setup
       return {

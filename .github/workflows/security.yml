@@ -1,0 +1,347 @@
+name: Security
+
+on:
+  schedule:
+    # Run security checks daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+  workflow_dispatch: # Allow manual triggering
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dependency-audit:
+    name: Dependency Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run npm audit
+        run: |
+          # Create package-lock.json if it doesn't exist (for bun users)
+          if [ ! -f "package-lock.json" ]; then
+            echo "Creating package-lock.json for audit..."
+            npm i --package-lock-only
+          fi
+
+          # Run audit and capture output
+          npm audit --audit-level=moderate --json > audit-results.json || true
+
+          # Check if there are any vulnerabilities
+          VULNERABILITIES=$(cat audit-results.json | jq '.metadata.vulnerabilities.total // 0')
+
+          if [ "$VULNERABILITIES" -gt 0 ]; then
+            echo "⚠️ Found $VULNERABILITIES vulnerabilities"
+            npm audit --audit-level=moderate
+
+            # Create summary
+            echo "## Security Audit Results" >> $GITHUB_STEP_SUMMARY
+            echo "Found **$VULNERABILITIES** vulnerabilities" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Run \`npm audit fix\` to attempt automatic fixes." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "✅ No vulnerabilities found"
+            echo "## Security Audit Results" >> $GITHUB_STEP_SUMMARY
+            echo "✅ No vulnerabilities found in dependencies" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Upload audit results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: audit-results
+          path: audit-results.json
+          retention-days: 30
+
+  codeql-analysis:
+    name: CodeQL Security Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ['javascript']
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-extended,security-and-quality
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project
+        run: npm run compile
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: '/language:${{matrix.language}}'
+
+  secret-scan:
+    name: Secret Scanning
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run TruffleHog
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: main
+          head: HEAD
+          extra_args: --debug --only-verified
+
+  license-check:
+    name: License Compliance Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install license checker
+        run: npm install -g license-checker
+
+      - name: Check licenses
+        run: |
+          echo "## License Compliance Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Generate license report
+          license-checker --json --out licenses.json
+
+          # Check for problematic licenses
+          PROBLEMATIC_LICENSES="GPL-2.0,GPL-3.0,AGPL-1.0,AGPL-3.0,LGPL-2.0,LGPL-2.1,LGPL-3.0,MPL-2.0"
+
+          # Parse and check licenses
+          node -e "
+            const fs = require('fs');
+            const licenses = JSON.parse(fs.readFileSync('licenses.json', 'utf8'));
+            const problematic = '$PROBLEMATIC_LICENSES'.split(',');
+
+            let hasProblems = false;
+            let summary = '';
+
+            for (const [pkg, info] of Object.entries(licenses)) {
+              const license = info.licenses || 'Unknown';
+              if (problematic.some(p => license.includes(p))) {
+                hasProblems = true;
+                summary += \`⚠️ **\${pkg}**: \${license}\n\`;
+              }
+            }
+
+            if (hasProblems) {
+              console.log('❌ Found problematic licenses');
+              fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, '### ⚠️ Problematic Licenses Found\n\n' + summary + '\n');
+              process.exit(1);
+            } else {
+              console.log('✅ All licenses are compatible');
+              fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, '✅ All dependency licenses are compatible\n\n');
+            }
+          "
+
+      - name: Upload license report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: license-report
+          path: licenses.json
+          retention-days: 30
+
+  supply-chain-security:
+    name: Supply Chain Security
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check for known malicious packages
+        run: |
+          # Install socket.dev CLI for supply chain security
+          npm install -g @socketsecurity/cli
+
+          # Run socket security scan
+          socket security package.json || true
+
+      - name: Verify package integrity
+        run: |
+          echo "## Package Integrity Check" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Check package-lock.json integrity
+          if [ -f "package-lock.json" ]; then
+            npm ci --dry-run
+            echo "✅ package-lock.json integrity verified" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ No package-lock.json found" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Check for suspicious dependencies
+          SUSPICIOUS_PATTERNS="bitcoin|crypto|mining|wallet|keylogger|backdoor"
+
+          SUSPICIOUS_DEPS=$(npm list --depth=0 --json | jq -r '.dependencies | keys[]' | grep -iE "$SUSPICIOUS_PATTERNS" || true)
+
+          if [ -n "$SUSPICIOUS_DEPS" ]; then
+            echo "⚠️ **Potentially suspicious dependencies found:**" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            echo "$SUSPICIOUS_DEPS" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "✅ No suspicious dependencies detected" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  docker-security:
+    name: Docker Security Scan
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build Docker image for testing
+        run: |
+          # Create a simple Dockerfile for testing
+          cat > Dockerfile.test << EOF
+          FROM node:20-alpine
+          WORKDIR /app
+          COPY package*.json ./
+          RUN npm ci --only=production
+          COPY . .
+          RUN npm run compile
+          USER node
+          CMD ["node", "build/src/index.js"]
+          EOF
+
+      - name: Build test image
+        run: docker build -f Dockerfile.test -t adonis-odm:test .
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'adonis-odm:test'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  security-scorecard:
+    name: OSSF Security Scorecard
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    permissions:
+      security-events: write
+      id-token: write
+      actions: read
+      contents: read
+    steps:
+      - name: Run OSSF Scorecard
+        uses: ossf/scorecard-action@v2.3.1
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true
+
+      - name: Upload SARIF results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: results.sarif
+
+  security-summary:
+    name: Security Summary
+    runs-on: ubuntu-latest
+    needs: [dependency-audit, codeql-analysis, secret-scan, license-check, supply-chain-security]
+    if: always()
+    steps:
+      - name: Generate security summary
+        run: |
+          echo "# 🔒 Security Report Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+
+          # Check job statuses
+          if [ "${{ needs.dependency-audit.result }}" == "success" ]; then
+            echo "| Dependency Audit | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Dependency Audit | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.codeql-analysis.result }}" == "success" ]; then
+            echo "| CodeQL Analysis | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| CodeQL Analysis | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.secret-scan.result }}" == "success" ]; then
+            echo "| Secret Scanning | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Secret Scanning | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.license-check.result }}" == "success" ]; then
+            echo "| License Check | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| License Check | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.supply-chain-security.result }}" == "success" ]; then
+            echo "| Supply Chain | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Supply Chain | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "For detailed results, check individual job logs above." >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,81 @@
+{
+  "entryPoints": ["./src/index.ts"],
+  "out": "./docs/api",
+  "theme": "default",
+  "name": "AdonisJS MongoDB ODM",
+  "includeVersion": true,
+  "excludeExternals": true,
+  "excludePrivate": true,
+  "excludeProtected": false,
+  "excludeInternal": true,
+  "readme": "./README.md",
+  "categorizeByGroup": true,
+  "defaultCategory": "Other",
+  "categoryOrder": [
+    "Models",
+    "Decorators",
+    "Relationships",
+    "Query Builder",
+    "Providers",
+    "Commands",
+    "Types",
+    "Utilities",
+    "*"
+  ],
+  "sort": ["source-order"],
+  "kindSortOrder": [
+    "Document",
+    "Project",
+    "Module",
+    "Namespace",
+    "Enum",
+    "EnumMember",
+    "Class",
+    "Interface",
+    "TypeAlias",
+    "Constructor",
+    "Property",
+    "Variable",
+    "Function",
+    "Accessor",
+    "Method",
+    "Parameter",
+    "TypeParameter",
+    "TypeLiteral",
+    "CallSignature",
+    "ConstructorSignature",
+    "IndexSignature",
+    "GetSignature",
+    "SetSignature"
+  ],
+  "navigation": {
+    "includeCategories": true,
+    "includeGroups": true
+  },
+  "searchInComments": true,
+  "searchInDocuments": true,
+  "cleanOutputDir": true,
+  "titleLink": "https://github.com/DreamsHive/adonis-odm",
+  "navigationLinks": {
+    "GitHub": "https://github.com/DreamsHive/adonis-odm",
+    "NPM": "https://www.npmjs.com/package/adonis-odm"
+  },
+  "sidebarLinks": {
+    "Documentation": "https://github.com/DreamsHive/adonis-odm#readme",
+    "Examples": "https://github.com/DreamsHive/adonis-odm/tree/main/examples"
+  },
+  "hostedBaseUrl": "https://dreamshive.github.io/adonis-odm/",
+  "gitRevision": "main",
+  "gitRemote": "origin",
+  "sourceLinkTemplate": "https://github.com/DreamsHive/adonis-odm/blob/{gitRevision}/{path}#L{line}",
+  "plugin": [],
+  "logLevel": "Info",
+  "treatWarningsAsErrors": false,
+  "treatValidationWarningsAsErrors": false,
+  "intentionallyNotExported": [],
+  "validation": {
+    "notExported": true,
+    "invalidLink": true,
+    "notDocumented": false
+  }
+}

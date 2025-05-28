@@ -1,0 +1,205 @@
+name: 'CodeQL Advanced Security'
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Run CodeQL analysis weekly on Sundays at 3 AM UTC
+    - cron: '0 3 * * 0'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ['javascript']
+        # Add more languages if needed: ['cpp', 'csharp', 'go', 'java', 'javascript', 'python', 'ruby']
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # Initialize the CodeQL tools for scanning
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          # Use extended security queries for more comprehensive analysis
+          queries: security-extended,security-and-quality
+          # Custom query packs can be added here
+          # packs: security-extended,security-and-quality
+
+      # Install dependencies for better analysis
+      - name: Install dependencies
+        run: npm ci
+
+      # Build the project for analysis
+      - name: Build project
+        run: |
+          npm run compile
+          echo "Build completed for CodeQL analysis"
+
+      # Perform CodeQL Analysis
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: '/language:${{matrix.language}}'
+          # Upload results even if there are errors
+          upload: true
+
+      # Generate security report
+      - name: Generate Security Report
+        if: always()
+        run: |
+          echo "## CodeQL Security Analysis Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Language: **${{ matrix.language }}**" >> $GITHUB_STEP_SUMMARY
+          echo "Analysis completed at: $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Analysis Coverage" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Security vulnerabilities" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Code quality issues" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Best practice violations" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Potential bugs" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Results will be available in the Security tab of this repository." >> $GITHUB_STEP_SUMMARY
+
+  custom-queries:
+    name: Custom Security Queries
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run custom security checks
+        run: |
+          echo "## Custom Security Analysis" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Check for hardcoded secrets patterns
+          echo "### Hardcoded Secrets Check" >> $GITHUB_STEP_SUMMARY
+          SECRET_PATTERNS="password|secret|key|token|api_key|private_key"
+
+          if grep -r -i -E "$SECRET_PATTERNS" src/ --exclude-dir=node_modules --exclude="*.test.*" --exclude="*.spec.*"; then
+            echo "⚠️ Potential hardcoded secrets found" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "✅ No hardcoded secrets detected" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Check for SQL injection patterns
+          echo "### SQL Injection Check" >> $GITHUB_STEP_SUMMARY
+          SQL_PATTERNS="query.*\+|exec.*\+|execute.*\+"
+
+          if grep -r -E "$SQL_PATTERNS" src/ --exclude-dir=node_modules; then
+            echo "⚠️ Potential SQL injection vulnerabilities found" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "✅ No SQL injection patterns detected" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Check for unsafe eval usage
+          echo "### Unsafe Code Execution Check" >> $GITHUB_STEP_SUMMARY
+          UNSAFE_PATTERNS="eval\(|Function\(|setTimeout.*string|setInterval.*string"
+
+          if grep -r -E "$UNSAFE_PATTERNS" src/ --exclude-dir=node_modules; then
+            echo "⚠️ Unsafe code execution patterns found" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "✅ No unsafe code execution detected" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  sarif-upload:
+    name: Upload SARIF Results
+    runs-on: ubuntu-latest
+    needs: [analyze]
+    if: always()
+    steps:
+      - name: Download SARIF results
+        uses: actions/download-artifact@v4
+        with:
+          name: codeql-results
+          path: sarif-results/
+        continue-on-error: true
+
+      - name: Upload SARIF to GitHub
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: sarif-results/
+        continue-on-error: true
+
+  security-summary:
+    name: Security Analysis Summary
+    runs-on: ubuntu-latest
+    needs: [analyze, custom-queries]
+    if: always()
+    steps:
+      - name: Generate comprehensive summary
+        run: |
+          echo "# 🔒 Comprehensive Security Analysis Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Analysis Date:** $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "**Repository:** ${{ github.repository }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "## Analysis Results" >> $GITHUB_STEP_SUMMARY
+          echo "| Component | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ needs.analyze.result }}" == "success" ]; then
+            echo "| CodeQL Analysis | ✅ Completed |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| CodeQL Analysis | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.custom-queries.result }}" == "success" ]; then
+            echo "| Custom Security Checks | ✅ Completed |" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.custom-queries.result }}" == "skipped" ]; then
+            echo "| Custom Security Checks | ⏭️ Skipped |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Custom Security Checks | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Security Recommendations" >> $GITHUB_STEP_SUMMARY
+          echo "- 🔍 Review any security alerts in the Security tab" >> $GITHUB_STEP_SUMMARY
+          echo "- 📋 Check dependency vulnerabilities regularly" >> $GITHUB_STEP_SUMMARY
+          echo "- 🔄 Keep dependencies updated" >> $GITHUB_STEP_SUMMARY
+          echo "- 🛡️ Follow secure coding practices" >> $GITHUB_STEP_SUMMARY
+          echo "- 📝 Document security considerations" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "1. Review any security findings in the [Security tab](https://github.com/${{ github.repository }}/security)" >> $GITHUB_STEP_SUMMARY
+          echo "2. Address any high or critical severity issues" >> $GITHUB_STEP_SUMMARY
+          echo "3. Consider implementing additional security measures" >> $GITHUB_STEP_SUMMARY
+          echo "4. Schedule regular security reviews" >> $GITHUB_STEP_SUMMARY

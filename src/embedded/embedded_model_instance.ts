@@ -1,4 +1,5 @@
 import type { BaseModel } from '../base_model/base_model.js'
+import { DatabaseOperationException, HookExecutionException } from '../exceptions/index.js'
 
 /**
  * Enhanced embedded model instance that behaves like a full model
@@ -35,7 +36,6 @@ export class EmbeddedModelInstance<T extends typeof BaseModel> {
     // Override the instance's save method to prevent it from trying to save itself
     // This is crucial for embedded documents that don't have their own _id
     this._instance.save = async () => {
-      console.log('⚠️ Embedded instance save() called - redirecting to parent save')
       return this.save()
     }
 
@@ -83,63 +83,112 @@ export class EmbeddedModelInstance<T extends typeof BaseModel> {
    * Save the embedded document (updates the parent document)
    */
   async save(): Promise<InstanceType<T>> {
-    // Execute beforeSave hooks on the embedded instance
-    const { executeHooks } = await import('../base_model/hooks_executor.js')
+    try {
+      // Execute beforeSave hooks on the embedded instance
+      const { executeHooks } = await import('../base_model/hooks_executor.js')
 
-    if (!(await executeHooks(this._instance, 'beforeSave', this._modelClass))) {
+      try {
+        if (!(await executeHooks(this._instance, 'beforeSave', this._modelClass))) {
+          return this._instance
+        }
+      } catch (error) {
+        throw new HookExecutionException('beforeSave', this._modelClass.name, error as Error)
+      }
+
+      // Mark parent as dirty and save the parent document
+      this.markParentDirty()
+      try {
+        await this._parent.save()
+      } catch (error) {
+        throw new DatabaseOperationException(
+          `save embedded ${this._modelClass.name} via parent`,
+          error as Error
+        )
+      }
+
+      // Execute afterSave hooks on the embedded instance
+      try {
+        await executeHooks(this._instance, 'afterSave', this._modelClass)
+      } catch (error) {
+        throw new HookExecutionException('afterSave', this._modelClass.name, error as Error)
+      }
+
       return this._instance
+    } catch (error) {
+      // Re-throw our custom exceptions as-is, wrap others
+      if (error instanceof DatabaseOperationException || error instanceof HookExecutionException) {
+        throw error
+      }
+      throw new DatabaseOperationException(`save embedded ${this._modelClass.name}`, error as Error)
     }
-
-    // Mark parent as dirty and save the parent document
-    this.markParentDirty()
-    await this._parent.save()
-
-    // Execute afterSave hooks on the embedded instance
-    await executeHooks(this._instance, 'afterSave', this._modelClass)
-
-    return this._instance
   }
 
   /**
    * Delete the embedded document (removes it from parent and saves)
    */
   async delete(): Promise<boolean> {
-    // Execute beforeDelete hooks on the embedded instance
-    const { executeHooks } = await import('../base_model/hooks_executor.js')
+    try {
+      // Execute beforeDelete hooks on the embedded instance
+      const { executeHooks } = await import('../base_model/hooks_executor.js')
 
-    if (!(await executeHooks(this._instance, 'beforeDelete', this._modelClass))) {
-      return false
-    }
+      try {
+        if (!(await executeHooks(this._instance, 'beforeDelete', this._modelClass))) {
+          return false
+        }
+      } catch (error) {
+        throw new HookExecutionException('beforeDelete', this._modelClass.name, error as Error)
+      }
 
-    if (this._isArrayItem) {
-      // Remove from array
-      const parentArray = (this._parent as any)[this._fieldName]
-      if (Array.isArray(parentArray) && this._arrayIndex !== undefined) {
-        parentArray.splice(this._arrayIndex, 1)
+      if (this._isArrayItem) {
+        // Remove from array
+        const parentArray = (this._parent as any)[this._fieldName]
+        if (Array.isArray(parentArray) && this._arrayIndex !== undefined) {
+          parentArray.splice(this._arrayIndex, 1)
 
-        // Update array indices for remaining items
-        for (let i = this._arrayIndex; i < parentArray.length; i++) {
-          if (
-            parentArray[i] &&
-            typeof parentArray[i] === 'object' &&
-            '_arrayIndex' in parentArray[i]
-          ) {
-            ;(parentArray[i] as any)._arrayIndex = i
+          // Update array indices for remaining items
+          for (let i = this._arrayIndex; i < parentArray.length; i++) {
+            if (
+              parentArray[i] &&
+              typeof parentArray[i] === 'object' &&
+              '_arrayIndex' in parentArray[i]
+            ) {
+              ;(parentArray[i] as any)._arrayIndex = i
+            }
           }
         }
+      } else {
+        // Set single embedded to null
+        ;(this._parent as any)[this._fieldName] = null
       }
-    } else {
-      // Set single embedded to null
-      ;(this._parent as any)[this._fieldName] = null
+
+      // Save the parent document
+      try {
+        await this._parent.save()
+      } catch (error) {
+        throw new DatabaseOperationException(
+          `delete embedded ${this._modelClass.name} via parent`,
+          error as Error
+        )
+      }
+
+      // Execute afterDelete hooks on the embedded instance
+      try {
+        await executeHooks(this._instance, 'afterDelete', this._modelClass)
+      } catch (error) {
+        throw new HookExecutionException('afterDelete', this._modelClass.name, error as Error)
+      }
+
+      return true
+    } catch (error) {
+      // Re-throw our custom exceptions as-is, wrap others
+      if (error instanceof DatabaseOperationException || error instanceof HookExecutionException) {
+        throw error
+      }
+      throw new DatabaseOperationException(
+        `delete embedded ${this._modelClass.name}`,
+        error as Error
+      )
     }
-
-    // Save the parent document
-    await this._parent.save()
-
-    // Execute afterDelete hooks on the embedded instance
-    await executeHooks(this._instance, 'afterDelete', this._modelClass)
-
-    return true
   }
 
   /**

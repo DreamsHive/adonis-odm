@@ -1,32 +1,363 @@
-# Dependencies and AdonisJS build
-node_modules
-build
-tmp
+# =============================================================================
+# AdonisJS MongoDB ODM - Comprehensive .gitignore
+# =============================================================================
 
-# Secrets
-.env
-.env.local
-.env.production.local
-.env.development.local
+# =============================================================================
+# Node.js Dependencies
+# =============================================================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# =============================================================================
+# AdonisJS Specific
+# =============================================================================
+# Build output
+build/
+tmp/
+.adonisjs/
+
+# AdonisJS cache
+.adonisjs/
+ace-manifest.json
 
 # Frontend assets compiled code
-public/assets
+public/assets/
+public/hot
 
-# Build tools specific
-npm-debug.log
-yarn-error.log
+# =============================================================================
+# Environment Variables & Secrets
+# =============================================================================
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.staging
 
-# Editors specific
-.fleet
-.idea
-.vscode
+# Environment variable validation cache
+.env.example.local
 
-# Platform specific
-.DS_Store
+# =============================================================================
+# MongoDB Specific
+# =============================================================================
+# MongoDB data directory (if running locally)
+data/
+mongodb-data/
+mongo-data/
 
-# Package Manager lock file
+# MongoDB logs
+*.log
+mongodb.log
+mongod.log
+
+# MongoDB dump files
+dump/
+*.bson
+*.json.gz
+
+# =============================================================================
+# TypeScript
+# =============================================================================
+*.tsbuildinfo
+.tscache/
+
+# =============================================================================
+# Testing
+# =============================================================================
+# Coverage directory used by tools like istanbul
+coverage/
+*.lcov
+.nyc_output/
+
+# Test results
+test-results/
+junit.xml
+test-report.xml
+
+# Jest
+.jest/
+
+# =============================================================================
+# Package Managers
+# =============================================================================
+# npm
 package-lock.json
+npm-debug.log*
+.npm
+
+# Yarn
 yarn.lock
+yarn-error.log
+.yarn/
+.yarn-integrity
+
+# pnpm
+pnpm-lock.yaml
+.pnpm-debug.log*
+.pnpm/
+
+# Bun
 bun.lock
 bun.lockb
-pnpm-lock.yaml
+
+# =============================================================================
+# Editors & IDEs
+# =============================================================================
+# Visual Studio Code
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# JetBrains IDEs
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# Fleet
+.fleet/
+
+# =============================================================================
+# Operating Systems
+# =============================================================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# =============================================================================
+# Development Tools
+# =============================================================================
+# ESLint cache
+.eslintcache
+
+# Prettier cache
+.prettiercache
+
+# Stylelint cache
+.stylelintcache
+
+# TypeScript incremental compilation cache
+*.tsbuildinfo
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Microbundle cache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# =============================================================================
+# Logs
+# =============================================================================
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# =============================================================================
+# Documentation
+# =============================================================================
+# Generated documentation
+docs/api/
+docs/build/
+.docusaurus/
+
+# =============================================================================
+# Deployment & CI/CD
+# =============================================================================
+# Docker
+.dockerignore
+docker-compose.override.yml
+
+# Kubernetes
+*.kubeconfig
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# =============================================================================
+# Temporary Files
+# =============================================================================
+# Temporary folders
+tmp/
+temp/
+.tmp/
+.temp/
+
+# Cache directories
+.cache/
+.parcel-cache/
+
+# =============================================================================
+# Security & Certificates
+# =============================================================================
+# SSL certificates
+*.pem
+*.key
+*.crt
+*.csr
+*.p12
+*.pfx
+
+# SSH keys
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
+
+# =============================================================================
+# Backup Files
+# =============================================================================
+*.bak
+*.backup
+*.old
+*.orig
+*.save
+
+# =============================================================================
+# Custom Project Specific - MongoDB ODM
+# =============================================================================
+# MongoDB ODM specific patterns
+
+# Test databases and data
+test-db/
+test-data/
+fixtures/
+
+# Generated model files (if using code generation)
+generated-models/
+
+# Performance benchmarks output
+benchmarks/results/
+*.benchmark
+
+# Migration files backup
+migrations-backup/
+
+# Example applications data
+examples/*/data/
+examples/*/.env
+examples/*/node_modules/
+examples/*/build/
+
+# Documentation builds
+docs/dist/
+docs/.vitepress/dist/
+docs/.vitepress/cache/
+
+# Package distribution files
+dist/
+lib/
+
+# Development database files
+dev.db
+development.db
+*.sqlite
+*.sqlite3
+
+# MongoDB Compass connections
+*.mongodb
+
+# =============================================================================
+# VS Code Workspace Settings (Keep These)
+# =============================================================================
+# Note: We keep some VS Code files for better developer experience
+# .vscode/settings.json - Project-specific settings
+# .vscode/tasks.json - Build and test tasks
+# .vscode/launch.json - Debug configurations
+# .vscode/extensions.json - Recommended extensions

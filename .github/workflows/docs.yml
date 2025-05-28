@@ -1,0 +1,272 @@
+name: Documentation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'README.md'
+      - 'src/**/*.ts'
+      - 'package.json'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'README.md'
+      - 'src/**/*.ts'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-docs:
+    name: Validate Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check documentation links
+        run: |
+          echo "## Documentation Validation" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Install markdown link checker
+          npm install -g markdown-link-check
+
+          # Check README.md
+          echo "### README.md" >> $GITHUB_STEP_SUMMARY
+          if markdown-link-check README.md; then
+            echo "✅ README.md links are valid" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ README.md has broken links" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Check documentation files
+          echo "### Documentation Files" >> $GITHUB_STEP_SUMMARY
+          BROKEN_LINKS=0
+
+          for file in docs/*.md; do
+            if [ -f "$file" ]; then
+              echo "Checking $file..."
+              if markdown-link-check "$file"; then
+                echo "✅ $file" >> $GITHUB_STEP_SUMMARY
+              else
+                echo "❌ $file" >> $GITHUB_STEP_SUMMARY
+                BROKEN_LINKS=$((BROKEN_LINKS + 1))
+              fi
+            fi
+          done
+
+          if [ $BROKEN_LINKS -gt 0 ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "⚠️ Found $BROKEN_LINKS files with broken links" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+
+      - name: Validate code examples
+        run: |
+          echo "## Code Example Validation" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Extract and validate TypeScript code blocks from README
+          node -e "
+            const fs = require('fs');
+            const readme = fs.readFileSync('README.md', 'utf8');
+
+            // Extract TypeScript code blocks
+            const codeBlocks = readme.match(/\`\`\`typescript\n([\s\S]*?)\n\`\`\`/g) || [];
+
+            console.log(\`Found \${codeBlocks.length} TypeScript code blocks\`);
+
+            let validBlocks = 0;
+            let invalidBlocks = 0;
+
+            codeBlocks.forEach((block, index) => {
+              const code = block.replace(/\`\`\`typescript\n/, '').replace(/\n\`\`\`/, '');
+
+              // Basic validation - check for common syntax issues
+              if (code.includes('import') && code.includes('export')) {
+                validBlocks++;
+              } else if (code.includes('class') || code.includes('interface') || code.includes('const')) {
+                validBlocks++;
+              } else {
+                console.log(\`Warning: Code block \${index + 1} might be incomplete\`);
+                invalidBlocks++;
+              }
+            });
+
+            console.log(\`Valid blocks: \${validBlocks}, Potentially invalid: \${invalidBlocks}\`);
+
+            // Write to GitHub summary
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, \`Found **\${codeBlocks.length}** TypeScript code examples\n\`);
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, \`- ✅ Valid: \${validBlocks}\n\`);
+            if (invalidBlocks > 0) {
+              fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, \`- ⚠️ Potentially incomplete: \${invalidBlocks}\n\`);
+            }
+          "
+
+      - name: Check documentation completeness
+        run: |
+          echo "## Documentation Completeness" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Check if all major features are documented
+          FEATURES=(
+            "BaseModel"
+            "Query Builder"
+            "Relationships"
+            "Embedded Documents"
+            "Transactions"
+            "Hooks"
+            "Configuration"
+          )
+
+          MISSING_DOCS=()
+
+          for feature in "${FEATURES[@]}"; do
+            if grep -q "$feature" README.md; then
+              echo "✅ $feature documented" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "❌ $feature missing from documentation" >> $GITHUB_STEP_SUMMARY
+              MISSING_DOCS+=("$feature")
+            fi
+          done
+
+          if [ ${#MISSING_DOCS[@]} -gt 0 ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "⚠️ Missing documentation for: ${MISSING_DOCS[*]}" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  generate-api-docs:
+    name: Generate API Documentation
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install TypeDoc
+        run: npm install -g typedoc
+
+      - name: Generate API documentation
+        run: |
+          # Create TypeDoc configuration
+          cat > typedoc.json << EOF
+          {
+            "entryPoints": ["src/index.ts"],
+            "out": "docs/api",
+            "theme": "default",
+            "includeVersion": true,
+            "excludePrivate": true,
+            "excludeProtected": false,
+            "excludeExternals": true,
+            "readme": "README.md",
+            "name": "AdonisJS MongoDB ODM",
+            "tsconfig": "tsconfig.json"
+          }
+          EOF
+
+          # Generate documentation
+          typedoc --options typedoc.json
+
+          echo "✅ API documentation generated in docs/api/"
+
+      - name: Upload API docs
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-documentation
+          path: docs/api/
+          retention-days: 30
+
+  check-docs-freshness:
+    name: Check Documentation Freshness
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check documentation age
+        run: |
+          echo "## Documentation Freshness Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Check when documentation files were last updated
+          CURRENT_DATE=$(date +%s)
+          THIRTY_DAYS_AGO=$((CURRENT_DATE - 30*24*60*60))
+
+          OLD_DOCS=()
+
+          for file in README.md docs/*.md; do
+            if [ -f "$file" ]; then
+              LAST_MODIFIED=$(git log -1 --format="%ct" -- "$file" 2>/dev/null || echo "0")
+
+              if [ "$LAST_MODIFIED" -lt "$THIRTY_DAYS_AGO" ]; then
+                DAYS_OLD=$(( (CURRENT_DATE - LAST_MODIFIED) / 86400 ))
+                OLD_DOCS+=("$file ($DAYS_OLD days old)")
+                echo "⚠️ $file is $DAYS_OLD days old" >> $GITHUB_STEP_SUMMARY
+              else
+                DAYS_OLD=$(( (CURRENT_DATE - LAST_MODIFIED) / 86400 ))
+                echo "✅ $file ($DAYS_OLD days old)" >> $GITHUB_STEP_SUMMARY
+              fi
+            fi
+          done
+
+          if [ ${#OLD_DOCS[@]} -gt 0 ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "📝 Consider updating these documentation files:" >> $GITHUB_STEP_SUMMARY
+            for doc in "${OLD_DOCS[@]}"; do
+              echo "- $doc" >> $GITHUB_STEP_SUMMARY
+            done
+          fi
+
+  docs-summary:
+    name: Documentation Summary
+    runs-on: ubuntu-latest
+    needs: [validate-docs, generate-api-docs]
+    if: always()
+    steps:
+      - name: Generate documentation summary
+        run: |
+          echo "# 📚 Documentation Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Task | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ needs.validate-docs.result }}" == "success" ]; then
+            echo "| Documentation Validation | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Documentation Validation | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.generate-api-docs.result }}" == "success" ]; then
+            echo "| API Documentation | ✅ Generated |" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.generate-api-docs.result }}" == "skipped" ]; then
+            echo "| API Documentation | ⏭️ Skipped |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| API Documentation | ❌ Failed |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📖 API documentation artifacts are available for download" >> $GITHUB_STEP_SUMMARY

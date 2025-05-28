@@ -1,0 +1,95 @@
+version: 2
+updates:
+  # Enable version updates for npm
+  - package-ecosystem: 'npm'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+      time: '09:00'
+      timezone: 'GMT+7'
+    open-pull-requests-limit: 10
+    reviewers:
+      - 'devoresyah' # Replace with actual maintainer usernames
+    assignees:
+      - 'devoresyah' # Replace with actual maintainer usernames
+    commit-message:
+      prefix: 'deps'
+      prefix-development: 'deps-dev'
+      include: 'scope'
+    labels:
+      - 'dependencies'
+      - 'automated'
+    # Group related updates
+    groups:
+      adonisjs:
+        patterns:
+          - '@adonisjs/*'
+      testing:
+        patterns:
+          - '*test*'
+          - '*jest*'
+          - '*mocha*'
+          - '*chai*'
+          - '*sinon*'
+      linting:
+        patterns:
+          - '*eslint*'
+          - '*prettier*'
+          - '*lint*'
+      typescript:
+        patterns:
+          - 'typescript'
+          - '@types/*'
+          - 'ts-*'
+    # Ignore specific dependencies that need manual review
+    ignore:
+      - dependency-name: 'mongodb'
+        # Only allow patch updates for MongoDB driver
+        update-types: ['version-update:semver-major', 'version-update:semver-minor']
+      - dependency-name: '@adonisjs/core'
+        # Only allow patch updates for AdonisJS core
+        update-types: ['version-update:semver-major']
+
+  # Enable version updates for GitHub Actions
+  - package-ecosystem: 'github-actions'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+      time: '10:00'
+      timezone: 'UTC'
+    open-pull-requests-limit: 5
+    reviewers:
+      - 'devoresyah'
+    assignees:
+      - 'devoresyah'
+    commit-message:
+      prefix: 'ci'
+      include: 'scope'
+    labels:
+      - 'github-actions'
+      - 'automated'
+    # Group all GitHub Actions updates together
+    groups:
+      github-actions:
+        patterns:
+          - '*'
+
+  # Enable version updates for Docker (if using Docker in the future)
+  - package-ecosystem: 'docker'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+      day: 'tuesday'
+      time: '09:00'
+      timezone: 'GMT+7'
+    open-pull-requests-limit: 3
+    reviewers:
+      - 'devoresyah'
+    commit-message:
+      prefix: 'docker'
+      include: 'scope'
+    labels:
+      - 'docker'
+      - 'automated'

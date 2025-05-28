@@ -77,15 +77,15 @@ MONGO_SOCKET_TIMEOUT_MS=0
 MONGO_CONNECT_TIMEOUT_MS=10000
 ```
 
-### MongoDB Configuration File
+### ODM Configuration File
 
-Update your `config/mongodb.ts` to use environment variables:
+Update your `config/odm.ts` to use environment variables:
 
 ```typescript
-import { MongoConfig } from '../src/types/index.js'
+import { OdmConfig } from '../src/types/index.js'
 import env from '#start/env'
 
-const mongoConfig: MongoConfig = {
+const odmConfig: OdmConfig = {
   connection: env.get('MONGO_CONNECTION', 'mongodb'),
 
   connections: {

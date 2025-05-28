@@ -3,6 +3,25 @@
   "compilerOptions": {
     "rootDir": "./",
     "outDir": "./build",
-    "allowJs": true
-  }
+    "allowJs": true,
+    "declaration": true,
+    "declarationMap": true
+  },
+  "include": [
+    "src/**/*",
+    "providers/**/*",
+    "commands/**/*",
+    "services/**/*",
+    "configure.ts",
+    "stubs/**/*"
+  ],
+  "exclude": [
+    "examples/**/*",
+    "docs/**/*",
+    "scripts/**/*",
+    "adonisrc.ts",
+    "ace.js",
+    "build/**/*",
+    "node_modules/**/*"
+  ]
 }

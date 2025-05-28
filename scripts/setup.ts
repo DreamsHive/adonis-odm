@@ -8,10 +8,10 @@ import { join } from 'node:path'
  * This script helps configure the MongoDB ODM in an AdonisJS project
  */
 
-const CONFIG_TEMPLATE = `import { MongoConfig } from '../src/types/index.js'
+const CONFIG_TEMPLATE = `import { OdmConfig } from '../src/types/index.js'
 import env from '#start/env'
 
-const mongoConfig: MongoConfig = {
+const odmConfig: OdmConfig = {
   /*
   |--------------------------------------------------------------------------
   | Default Connection
@@ -24,11 +24,12 @@ const mongoConfig: MongoConfig = {
 
   /*
   |--------------------------------------------------------------------------
-  | MongoDB Connections
+  | ODM Connections
   |--------------------------------------------------------------------------
   |
-  | Here we define all the MongoDB connections used by your application.
+  | Here we define all the NoSQL database connections used by your application.
   | You can define multiple connections and switch between them as needed.
+  | Currently supports MongoDB, with DynamoDB support planned.
   |
   */
   connections: {
@@ -59,7 +60,7 @@ const mongoConfig: MongoConfig = {
   },
 }
 
-export default mongoConfig
+export default odmConfig
 `
 
 const ENV_TEMPLATE = `
@@ -147,7 +148,7 @@ async function setup() {
     createDirectoryIfNotExists('app/models')
 
     // Create configuration file
-    createFileIfNotExists(join('config', 'mongodb.ts'), CONFIG_TEMPLATE, 'MongoDB configuration')
+    createFileIfNotExists(join('config', 'odm.ts'), CONFIG_TEMPLATE, 'ODM configuration')
 
     // Add environment variables
     appendToFileIfNotExists('.env', ENV_TEMPLATE, 'MongoDB environment variables')

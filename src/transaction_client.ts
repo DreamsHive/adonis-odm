@@ -1,9 +1,4 @@
-import {
-  Collection,
-  Document,
-  ClientSession,
-  TransactionOptions as MongoTransactionOptions,
-} from 'mongodb'
+import { Collection, Document, ClientSession } from 'mongodb'
 import { BaseModel } from './base_model/base_model.js'
 import { ModelQueryBuilder } from './query_builder/model_query_builder.js'
 import { ModelConstructor } from './types/index.js'

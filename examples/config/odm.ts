@@ -1,7 +1,7 @@
-import { MongoConfig } from '../src/types/index.js'
+import { OdmConfig } from '../src/types/index.js'
 import env from '#start/env'
 
-const mongoConfig: MongoConfig = {
+const odmConfig: OdmConfig = {
   /*
   |--------------------------------------------------------------------------
   | Default Connection
@@ -14,11 +14,12 @@ const mongoConfig: MongoConfig = {
 
   /*
   |--------------------------------------------------------------------------
-  | MongoDB Connections
+  | ODM Connections
   |--------------------------------------------------------------------------
   |
-  | Here we define all the MongoDB connections used by your application.
+  | Here we define all the NoSQL database connections used by your application.
   | You can define multiple connections and switch between them as needed.
+  | Currently supports MongoDB, with DynamoDB support planned.
   |
   */
   connections: {
@@ -38,6 +39,8 @@ const mongoConfig: MongoConfig = {
         host: env.get('MONGO_HOST', 'localhost'),
         port: env.get('MONGO_PORT', 27017),
         database: env.get('MONGO_DATABASE', 'adonis_mongo'),
+        username: env.get('MONGO_USERNAME'),
+        password: env.get('MONGO_PASSWORD'),
 
         // MongoDB connection options
         options: {
@@ -55,4 +58,4 @@ const mongoConfig: MongoConfig = {
   },
 }
 
-export default mongoConfig
+export default odmConfig

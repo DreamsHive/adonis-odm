@@ -3,7 +3,7 @@ import { createAccountValidator } from '#validators/crud'
 import Profile from '#models/profile'
 import UserWithReferencedProfile from '#models/user_with_referenced_profile'
 import UserWithEnhancedEmbeddedProfile from '#models/user_with_enhanced_embedded_profile'
-import db from '#services/mongodb_service'
+import db from 'adonis-odm/services/db'
 
 // Types
 import type { HttpContext } from '@adonisjs/core/http'

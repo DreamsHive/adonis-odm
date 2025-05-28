@@ -1,8 +1,10 @@
+import 'reflect-metadata'
 import { ApplicationService } from '@adonisjs/core/types'
 import { MongoDatabaseManager } from '../src/database_manager.js'
 import { BaseModel } from '../src/base_model/base_model.js'
 import { ModelQueryBuilder } from '../src/query_builder/model_query_builder.js'
-import { MongoConfig } from '../src/types/index.js'
+import { PersistenceManager } from '../src/base_model/persistence_manager.js'
+import { OdmConfig } from '../src/types/index.js'
 
 declare module '@adonisjs/core/types' {
   interface ContainerBindings {
@@ -24,18 +26,16 @@ export default class MongodbProvider {
    */
   register() {
     // Create the database manager instance
-    const config = this.app.config.get<MongoConfig>('mongodb')
+    const config = this.app.config.get<OdmConfig>('odm')
 
     if (!config) {
       throw new Error(
-        'MongoDB configuration not found. Please ensure config/mongodb.ts is properly configured.'
+        'ODM configuration not found. Please ensure config/odm.ts is properly configured.'
       )
     }
 
     if (!config.connections) {
-      throw new Error(
-        'MongoDB connections not configured. Please check your config/mongodb.ts file.'
-      )
+      throw new Error('ODM connections not configured. Please check your config/odm.ts file.')
     }
 
     this.manager = new MongoDatabaseManager(config)
@@ -43,6 +43,9 @@ export default class MongodbProvider {
     // Store it in the container
     this.app.container.bind('mongodb.manager', () => this.manager!)
     this.app.container.bind('mongodb', () => this.manager!)
+
+    // Also register the class itself for the service pattern
+    this.app.container.bind(MongoDatabaseManager, () => this.manager!)
   }
 
   /**
@@ -105,14 +108,17 @@ export default class MongodbProvider {
       return queryBuilder as any
     }
 
-    // Override the performInsert method
-    BaseModel.prototype['performInsert'] = async function (this: BaseModel, session?: any) {
-      const constructor = this.constructor as typeof BaseModel
+    // Extend PersistenceManager with database functionality
+
+    // Override the performInsert method in PersistenceManager
+    PersistenceManager.prototype.performInsert = async function (session?: any) {
+      const model = this.model
+      const constructor = model.constructor as typeof BaseModel
       const collectionName = constructor.getCollectionName()
       const connectionName = constructor.getConnection()
 
       const collection = manager.collection(collectionName, connectionName)
-      const document = this.toDocument()
+      const document = model.toDocument()
 
       // Remove _id if it's undefined to let MongoDB generate it
       if (!document._id) {
@@ -122,21 +128,22 @@ export default class MongodbProvider {
       // Use session if provided (for transactions)
       const options = session ? { session } : {}
       const result = await collection.insertOne(document as any, options)
-      this._id = result.insertedId
+      model._id = result.insertedId
     }
 
-    // Override the performUpdate method
-    BaseModel.prototype['performUpdate'] = async function (this: BaseModel, session?: any) {
-      if (!this._id) {
+    // Override the performUpdate method in PersistenceManager
+    PersistenceManager.prototype.performUpdate = async function (session?: any) {
+      const model = this.model
+      if (!model._id) {
         throw new Error('Cannot update model without an ID')
       }
 
-      const constructor = this.constructor as typeof BaseModel
+      const constructor = model.constructor as typeof BaseModel
       const collectionName = constructor.getCollectionName()
       const connectionName = constructor.getConnection()
 
       const collection = manager.collection(collectionName, connectionName)
-      const updates = (this as any).getDirtyAttributes()
+      const updates = model.getDirtyAttributes()
 
       if (Object.keys(updates).length === 0) {
         return // Nothing to update
@@ -144,7 +151,7 @@ export default class MongodbProvider {
 
       // Use session if provided (for transactions)
       const options = session ? { session } : {}
-      await collection.updateOne({ _id: this._id as any }, { $set: updates }, options)
+      await collection.updateOne({ _id: model._id as any }, { $set: updates }, options)
     }
   }
 }

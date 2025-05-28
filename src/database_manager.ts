@@ -5,8 +5,12 @@ import {
   Document,
   TransactionOptions as MongoTransactionOptions,
 } from 'mongodb'
-import { MongoConfig, MongoConnectionConfig, DatabaseManager } from './types/index.js'
-import { ConnectionException, ConfigurationException } from './exceptions/index.js'
+import { OdmConfig, MongoConnectionConfig, DatabaseManager } from './types/index.js'
+import {
+  ConnectionException,
+  ConfigurationException,
+  TransactionException,
+} from './exceptions/index.js'
 import { MongoTransactionClient, ConcreteMongoTransactionClient } from './transaction_client.js'
 
 /**
@@ -15,9 +19,9 @@ import { MongoTransactionClient, ConcreteMongoTransactionClient } from './transa
 export class MongoDatabaseManager implements DatabaseManager {
   private clients: Map<string, MongoClient> = new Map()
   private databases: Map<string, Db> = new Map()
-  private config: MongoConfig
+  private config: OdmConfig
 
-  constructor(config: MongoConfig) {
+  constructor(config: OdmConfig) {
     this.config = config
   }
 
@@ -69,8 +73,6 @@ export class MongoDatabaseManager implements DatabaseManager {
           const dbName = this.extractDatabaseName(config)
           const database = client.db(dbName)
           this.databases.set(name, database)
-
-          console.log(`MongoDB connection "${name}" established`)
         } catch (error) {
           throw new ConnectionException(name, error as Error)
         }
@@ -104,8 +106,23 @@ export class MongoDatabaseManager implements DatabaseManager {
       const host = config.connection.host || 'localhost'
       const port = config.connection.port || 27017
       const database = config.connection.database || 'test'
+      const username = config.connection.username
+      const password = config.connection.password
 
-      uri = `mongodb://${host}:${port}/${database}`
+      // Build authentication part of URI
+      let authString = ''
+      if (username && password) {
+        // Encode username and password to handle special characters
+        const encodedUsername = encodeURIComponent(username)
+        const encodedPassword = encodeURIComponent(password)
+        authString = `${encodedUsername}:${encodedPassword}@`
+      } else if (username) {
+        // Username without password
+        const encodedUsername = encodeURIComponent(username)
+        authString = `${encodedUsername}@`
+      }
+
+      uri = `mongodb://${authString}${host}:${port}/${database}`
     }
 
     const options = {
@@ -203,30 +220,65 @@ export class MongoDatabaseManager implements DatabaseManager {
       | MongoTransactionOptions,
     options?: MongoTransactionOptions
   ): Promise<TResult | MongoTransactionClient> {
-    const actualOptions = typeof callbackOrOptions === 'function' ? options : callbackOrOptions
-    const connectionName = this.config.connection // Get default connection
-    const mongoClient = this.connection(connectionName)
-    const session = mongoClient.startSession()
+    try {
+      const actualOptions = typeof callbackOrOptions === 'function' ? options : callbackOrOptions
+      const connectionName = this.config.connection // Get default connection
 
-    const trxClient = new ConcreteMongoTransactionClient(session, this, connectionName)
-
-    if (typeof callbackOrOptions === 'function') {
-      const callback = callbackOrOptions
+      let mongoClient: MongoClient
       try {
-        // Use MongoDB driver's withTransaction which handles retries for transient errors
-        return await session.withTransaction(async () => {
-          return callback(trxClient)
-        }, actualOptions)
+        mongoClient = this.connection(connectionName)
       } catch (error) {
-        // Rollback is handled by withTransaction on error
-        throw error
-      } finally {
-        session.endSession()
+        throw new TransactionException('get connection', error as Error)
       }
-    } else {
-      // Manual transaction: Start it, but user must commit/rollback
-      session.startTransaction(actualOptions)
-      return trxClient
+
+      let session
+      try {
+        session = mongoClient.startSession()
+      } catch (error) {
+        throw new TransactionException('start session', error as Error)
+      }
+
+      const trxClient = new ConcreteMongoTransactionClient(session, this, connectionName)
+
+      if (typeof callbackOrOptions === 'function') {
+        const callback = callbackOrOptions
+        try {
+          // Use MongoDB driver's withTransaction which handles retries for transient errors
+          return await session.withTransaction(async () => {
+            return callback(trxClient)
+          }, actualOptions)
+        } catch (error) {
+          // Rollback is handled by withTransaction on error
+          throw new TransactionException('execute transaction callback', error as Error)
+        } finally {
+          try {
+            session.endSession()
+          } catch (error) {
+            // Log but don't throw session cleanup errors
+            console.warn('Failed to end transaction session:', error)
+          }
+        }
+      } else {
+        // Manual transaction: Start it, but user must commit/rollback
+        try {
+          session.startTransaction(actualOptions)
+          return trxClient
+        } catch (error) {
+          try {
+            session.endSession()
+          } catch (cleanupError) {
+            // Log but don't throw session cleanup errors
+            console.warn('Failed to end transaction session after start error:', cleanupError)
+          }
+          throw new TransactionException('start manual transaction', error as Error)
+        }
+      }
+    } catch (error) {
+      // Re-throw TransactionException as-is, wrap others
+      if (error instanceof TransactionException) {
+        throw error
+      }
+      throw new TransactionException('transaction operation', error as Error)
     }
   }
 }

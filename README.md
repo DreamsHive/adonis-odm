@@ -1,5 +1,12 @@
 # MongoDB ODM for AdonisJS v6
 
+[![CI](https://github.com/DreamsHive/adonis-odm/workflows/CI/badge.svg)](https://github.com/DreamsHive/adonis-odm/actions/workflows/ci.yml)
+[![Security](https://github.com/DreamsHive/adonis-odm/workflows/Security/badge.svg)](https://github.com/DreamsHive/adonis-odm/actions/workflows/security.yml)
+[![Release](https://github.com/DreamsHive/adonis-odm/workflows/Release/badge.svg)](https://github.com/DreamsHive/adonis-odm/actions/workflows/release.yml)
+[![Documentation](https://github.com/DreamsHive/adonis-odm/workflows/Documentation/badge.svg)](https://github.com/DreamsHive/adonis-odm/actions/workflows/docs.yml)
+[![npm version](https://badge.fury.io/js/adonis-odm.svg)](https://www.npmjs.com/package/adonis-odm)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 A MongoDB Object Document Mapper (ODM) for AdonisJS v6 that provides a familiar Lucid ORM-like interface for working with MongoDB databases.
 
 ## Features
@@ -18,89 +25,186 @@ A MongoDB Object Document Mapper (ODM) for AdonisJS v6 that provides a familiar 
 
 ## Installation
 
+Install the package from the npm registry as follows:
+
 ```bash
-npm install mongodb luxon
+npm i adonis-odm
 ```
 
-**Note**: Database transactions require MongoDB 4.0+ and a replica set or sharded cluster configuration. Transactions are not supported on standalone MongoDB instances.
+```bash
+yarn add adonis-odm
+```
+
+```bash
+pnpm add adonis-odm
+```
+
+Next, configure the package by running the following ace command:
+
+```bash
+node ace configure adonis-odm
+```
+
+The configure command will:
+
+1. Register the MongoDB provider inside the `adonisrc.ts` file
+2. Create the `config/odm.ts` configuration file
+3. Add environment variables to your `.env` file
+4. Set up validation rules for environment variables
 
 ## Configuration
 
-### 1. Environment Variables
-
-Add MongoDB configuration to your `.env` file:
-
-```env
-MONGO_HOST=localhost
-MONGO_PORT=27017
-MONGO_DATABASE=your_database_name
-MONGO_URI=mongodb://localhost:27017/your_database_name
-```
-
-### 2. MongoDB Configuration
-
-Create `config/mongodb.ts`:
+The configuration for the ODM is stored inside the `config/odm.ts` file. You can define one or more NoSQL database connections inside this file. Currently supports MongoDB, with DynamoDB support planned.
 
 ```typescript
-import { MongoConfig } from '../src/types/index.js'
 import env from '#start/env'
+import { defineConfig } from 'adonis-odm'
 
-const mongoConfig: MongoConfig = {
-  connection: env.get('MONGO_CONNECTION', 'mongodb'),
+const odmConfig = defineConfig({
+  connection: 'mongodb',
 
   connections: {
     mongodb: {
       client: 'mongodb',
       connection: {
         // Option 1: Use a full URI
-        url: env.get('MONGO_URI', ''),
+        url: env.get('MONGO_URI'),
 
         // Option 2: Use individual components (if url is not provided)
         host: env.get('MONGO_HOST', 'localhost'),
-        port: Number(env.get('MONGO_PORT', '27017')),
-        database: env.get('MONGO_DATABASE', 'adonis_mongo'),
+        port: env.get('MONGO_PORT', 27017),
+        database: env.get('MONGO_DATABASE'),
 
         // MongoDB connection options
         options: {
-          maxPoolSize: Number(env.get('MONGO_MAX_POOL_SIZE', '10')),
-          minPoolSize: Number(env.get('MONGO_MIN_POOL_SIZE', '0')),
-          maxIdleTimeMS: Number(env.get('MONGO_MAX_IDLE_TIME_MS', '30000')),
-          serverSelectionTimeoutMS: Number(env.get('MONGO_SERVER_SELECTION_TIMEOUT_MS', '5000')),
-          socketTimeoutMS: Number(env.get('MONGO_SOCKET_TIMEOUT_MS', '0')),
-          connectTimeoutMS: Number(env.get('MONGO_CONNECT_TIMEOUT_MS', '10000')),
+          maxPoolSize: env.get('MONGO_MAX_POOL_SIZE', 10),
+          minPoolSize: env.get('MONGO_MIN_POOL_SIZE', 0),
+          maxIdleTimeMS: env.get('MONGO_MAX_IDLE_TIME_MS', 30000),
+          serverSelectionTimeoutMS: env.get('MONGO_SERVER_SELECTION_TIMEOUT_MS', 5000),
+          socketTimeoutMS: env.get('MONGO_SOCKET_TIMEOUT_MS', 0),
+          connectTimeoutMS: env.get('MONGO_CONNECT_TIMEOUT_MS', 10000),
         },
       },
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
     },
   },
-}
+})
 
-export default mongoConfig
+export default odmConfig
 ```
 
-### 3. Register the Provider
+### Environment Variables
 
-Add the MongoDB provider to your `adonisrc.ts`:
+The following environment variables are used by the MongoDB configuration:
+
+```env
+MONGO_HOST=localhost
+MONGO_PORT=27017
+MONGO_DATABASE=your_database_name
+MONGO_URI=mongodb://localhost:27017/your_database_name
+
+# Optional connection pool settings
+MONGO_MAX_POOL_SIZE=10
+MONGO_MIN_POOL_SIZE=0
+MONGO_MAX_IDLE_TIME_MS=30000
+MONGO_SERVER_SELECTION_TIMEOUT_MS=5000
+MONGO_SOCKET_TIMEOUT_MS=0
+MONGO_CONNECT_TIMEOUT_MS=10000
+```
+
+### Multiple Connections
+
+You can define multiple NoSQL database connections inside the `config/odm.ts` file and switch between them as needed:
 
 ```typescript
-export default defineConfig({
-  providers: [
-    // ... other providers
-    () => import('#providers/mongodb_provider'),
-  ],
+const odmConfig = defineConfig({
+  connection: 'primary',
+
+  connections: {
+    primary: {
+      client: 'mongodb',
+      connection: {
+        url: env.get('MONGO_PRIMARY_URI'),
+      },
+    },
+
+    analytics: {
+      client: 'mongodb',
+      connection: {
+        url: env.get('MONGO_ANALYTICS_URI'),
+      },
+    },
+  },
 })
 ```
 
+**Note**: Database transactions require MongoDB 4.0+ and a replica set or sharded cluster configuration. Transactions are not supported on standalone MongoDB instances.
+
+## Commands
+
+The package provides several ace commands to help you work with MongoDB ODM:
+
+### Configuration
+
+```bash
+# Configure the package (run this after installation)
+node ace configure adonis-odm
+```
+
+### Model Generation
+
+```bash
+# Create a new ODM model
+node ace make:odm-model User
+```
+
+### Database Operations
+
+```bash
+# Test database connection (coming soon)
+node ace mongodb:status
+
+# Show database information (coming soon)
+node ace mongodb:info
+```
+
+> **Note**: Model generation and database commands are planned for future releases. Currently, you need to create models manually by extending `BaseModel`.
+
 ## Usage
+
+### Database Service
+
+Import the database service to perform transactions and direct database operations:
+
+```typescript
+import db from 'adonis-odm/services/db'
+
+// Managed transaction (recommended)
+const result = await db.transaction(async (trx) => {
+  // Your operations here
+  return { success: true }
+})
+
+// Manual transaction
+const trx = await db.transaction()
+try {
+  // Your operations here
+  await trx.commit()
+} catch (error) {
+  await trx.rollback()
+}
+
+// Direct database access
+const mongoClient = db.connection()
+const database = db.db()
+const collection = db.collection('users')
+```
 
 ### Creating Models
 
 Create a model by extending `BaseModel` and using decorators:
 
 ```typescript
-import { BaseModel } from '../src/base_model/base_model.js'
-import { column } from '../src/decorators/column.js'
+import { BaseModel, column } from 'adonis-odm'
 import { DateTime } from 'luxon'
 
 export default class User extends BaseModel {
@@ -131,8 +235,7 @@ The ODM provides full support for embedded documents with type safety and CRUD o
 #### Defining Embedded Documents
 
 ```typescript
-import { BaseModel } from '../src/base_model/base_model.js'
-import { column } from '../src/decorators/column.js'
+import { BaseModel, column } from 'adonis-odm'
 import { DateTime } from 'luxon'
 
 // Embedded document model
@@ -159,7 +262,7 @@ export default class Profile extends BaseModel {
 }
 
 // Import embedded types
-import { EmbeddedSingle, EmbeddedMany } from '../src/types/embedded.js'
+import { EmbeddedSingle, EmbeddedMany } from 'adonis-odm'
 
 // Main model with embedded documents
 export default class User extends BaseModel {
@@ -733,7 +836,7 @@ The MongoDB ODM provides full ACID transaction support, similar to AdonisJS Luci
 Managed transactions automatically handle commit and rollback operations:
 
 ```typescript
-import db from '#services/mongodb_service'
+import db from 'adonis-odm/services/db'
 
 // Managed transaction with automatic commit/rollback
 const newUser = await db.transaction(async (trx) => {

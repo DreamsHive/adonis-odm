@@ -1,6 +1,3 @@
-import app from '@adonisjs/core/services/app'
-import { MongoDatabaseManager } from '../../src/database_manager.js'
-
 /**
  * MongoDB Database Service
  *
@@ -8,7 +5,7 @@ import { MongoDatabaseManager } from '../../src/database_manager.js'
  * similar to how AdonisJS Lucid provides the `db` service.
  *
  * Usage:
- * import db from '#services/mongodb_service'
+ * import db from 'adonis-odm/services/db'
  *
  * // Managed transaction
  * const result = await db.transaction(async (trx) => {
@@ -25,14 +22,7 @@ import { MongoDatabaseManager } from '../../src/database_manager.js'
  * }
  */
 
-let dbManager: MongoDatabaseManager
+// Import the database service directly from the package
+import db from 'adonis-odm/services/db'
 
-try {
-  dbManager = await app.container.make('mongodb')
-} catch (error) {
-  throw new Error(
-    'MongoDB service not available. Make sure the MongoDB provider is registered in adonisrc.ts'
-  )
-}
-
-export default dbManager
+export default db
