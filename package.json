@@ -16,7 +16,7 @@
     "embedded",
     "transactions"
   ],
-  "author": "Your Name <your.email@example.com>",
+  "author": "DreamsHive <engineers@dreamshive.com>",
   "repository": {
     "type": "git",
     "url": "https://github.com/DreamsHive/adonis-odm.git"
@@ -96,7 +96,6 @@
     "dev": "node --loader ts-node-maintained/esm --watch examples/bin/server.ts",
     "dev:debug": "node --loader ts-node-maintained/esm --inspect --watch examples/bin/server.ts",
     "docs:api": "typedoc --options typedoc.json",
-    "docs:serve": "npx http-server docs/api -p 8080",
     "release:dry": "npm version --no-git-tag-version",
     "release:patch": "npm version patch",
     "release:minor": "npm version minor",
@@ -121,7 +120,6 @@
     "del-cli": "^6.0.0",
     "eslint": "^9.26.0",
     "hot-hook": "^0.4.0",
-    "http-server": "^14.1.1",
     "pino-pretty": "^13.0.0",
     "prettier": "^3.5.3",
     "ts-node-maintained": "^10.9.5",
