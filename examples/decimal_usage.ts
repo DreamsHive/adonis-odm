@@ -44,7 +44,7 @@ async function demonstrateDecimalHandling() {
   const product = new Product()
   product.name = 'Premium Widget'
   product.price = 100.99
-  product.cost = 75.50
+  product.cost = 75.5
   product.earnings = 25.49
   product.category = 'Electronics'
 
@@ -73,7 +73,7 @@ async function demonstrateDecimalHandling() {
     price: { $numberDecimal: '100.99' },
     cost: { $numberDecimal: '75.50' },
     earnings: { $numberDecimal: '25.49' },
-    category: 'Electronics'
+    category: 'Electronics',
   }
 
   const loadedProduct = new Product()
@@ -105,7 +105,7 @@ class ProductWithRegularColumn extends BaseModel {
 
 async function demonstrateProblem() {
   console.log('\n=== DEMONSTRATING THE PROBLEM ===')
-  
+
   const product = new ProductWithRegularColumn()
   product.name = 'Test Product'
   product.price = 100.99
@@ -114,15 +114,15 @@ async function demonstrateProblem() {
   const mongoData = {
     _id: '507f1f77bcf86cd799439011',
     name: 'Test Product',
-    price: { $numberDecimal: '100.99' }
+    price: { $numberDecimal: '100.99' },
   }
 
   product.hydrateFromDocument(mongoData as any)
-  
+
   // Without the decimal decorator, this would show the raw MongoDB decimal object
   const json = product.toJSON()
   console.log('Without @column.decimal():', JSON.stringify(json, null, 2))
-  
+
   // The price would be serialized as { "$numberDecimal": "100.99" } instead of 100.99
 }
 

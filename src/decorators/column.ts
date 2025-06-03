@@ -223,11 +223,11 @@ column.decimal = function (options: DateColumnOptions = {}) {
           }
           // If it's a Decimal128, convert to number
           if (value && typeof value === 'object' && value.constructor?.name === 'Decimal128') {
-            return parseFloat(value.toString())
+            return Number.parseFloat(value.toString())
           }
           // If it's a BSON decimal object, convert to number
           if (value && typeof value === 'object' && value.$numberDecimal) {
-            return parseFloat(value.$numberDecimal)
+            return Number.parseFloat(value.$numberDecimal)
           }
           // Otherwise return as-is (including null/undefined)
           return value

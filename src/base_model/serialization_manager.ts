@@ -221,12 +221,12 @@ export class SerializationManager {
 
     // Handle MongoDB Decimal128 objects
     if (value instanceof Decimal128) {
-      return parseFloat(value.toString())
+      return Number.parseFloat(value.toString())
     }
 
     // Handle MongoDB decimal objects (BSON format)
     if (value && typeof value === 'object' && value.$numberDecimal) {
-      return parseFloat(value.$numberDecimal)
+      return Number.parseFloat(value.$numberDecimal)
     }
 
     // Handle arrays
