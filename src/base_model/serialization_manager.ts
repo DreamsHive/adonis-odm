@@ -1,5 +1,5 @@
 import { DateTime } from 'luxon'
-import { WithId, Document } from 'mongodb'
+import { WithId, Document, Decimal128 } from 'mongodb'
 import type { BaseModel } from './base_model.js'
 
 /**
@@ -217,6 +217,16 @@ export class SerializationManager {
     // Handle Date objects
     if (value instanceof Date) {
       return value.toISOString()
+    }
+
+    // Handle MongoDB Decimal128 objects
+    if (value instanceof Decimal128) {
+      return parseFloat(value.toString())
+    }
+
+    // Handle MongoDB decimal objects (BSON format)
+    if (value && typeof value === 'object' && value.$numberDecimal) {
+      return parseFloat(value.$numberDecimal)
     }
 
     // Handle arrays

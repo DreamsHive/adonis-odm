@@ -1,4 +1,5 @@
 import { DateTime } from 'luxon'
+import { Decimal128 } from 'mongodb'
 import type { ColumnOptions, DateColumnOptions, ModelMetadata } from '../types/index.js'
 import {
   createHasOneProxy,
@@ -155,6 +156,78 @@ column.dateTime = function (options: DateColumnOptions = {}) {
           // If it's a Date, convert to DateTime
           if (value instanceof Date) {
             return DateTime.fromJSDate(value)
+          }
+          // Otherwise return as-is (including null/undefined)
+          return value
+        }),
+    }
+    metadata.columns.set(propertyKey, columnOptions)
+
+    if (options.isPrimary) {
+      metadata.primaryKey = propertyKey
+    }
+
+    // Create property descriptor to track changes
+    const privateKey = `_${propertyKey}`
+    Object.defineProperty(target, propertyKey, {
+      get: function () {
+        return this[privateKey]
+      },
+      set: function (value: any) {
+        const oldValue = this[privateKey]
+
+        // Apply deserialization if needed
+        if (columnOptions.deserialize) {
+          value = columnOptions.deserialize(value)
+        }
+
+        this[privateKey] = value
+
+        // Track dirty attributes if value changed
+        if (oldValue !== value) {
+          this.$dirty[propertyKey] = value
+        }
+      },
+      configurable: true,
+      enumerable: true,
+    })
+  }
+}
+
+/**
+ * Decimal column decorator
+ * Handles MongoDB Decimal128 values for precise decimal arithmetic
+ */
+column.decimal = function (options: DateColumnOptions = {}) {
+  return function (target: any, propertyKey: string) {
+    const metadata = getMetadata(target)
+    const columnOptions: ColumnOptions = {
+      ...options,
+      serialize:
+        options.serialize ||
+        ((value: any) => {
+          if (typeof value === 'number') {
+            return Decimal128.fromString(value.toString())
+          }
+          if (value && typeof value === 'object' && value.constructor?.name === 'Decimal128') {
+            return value
+          }
+          return value
+        }),
+      deserialize:
+        options.deserialize ||
+        ((value: any) => {
+          // If it's already a number, return as-is
+          if (typeof value === 'number') {
+            return value
+          }
+          // If it's a Decimal128, convert to number
+          if (value && typeof value === 'object' && value.constructor?.name === 'Decimal128') {
+            return parseFloat(value.toString())
+          }
+          // If it's a BSON decimal object, convert to number
+          if (value && typeof value === 'object' && value.$numberDecimal) {
+            return parseFloat(value.$numberDecimal)
           }
           // Otherwise return as-is (including null/undefined)
           return value
