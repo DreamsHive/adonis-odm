@@ -1,5 +1,5 @@
 import 'reflect-metadata'
-import { ApplicationService } from '@adonisjs/core/types'
+import type { ApplicationService } from '@adonisjs/core/types'
 import { MongoDatabaseManager } from '../src/database_manager.js'
 import { BaseModel } from '../src/base_model/base_model.js'
 import { ModelQueryBuilder } from '../src/query_builder/model_query_builder.js'
@@ -17,9 +17,13 @@ declare module '@adonisjs/core/types' {
  * MongoDB ODM Service Provider for AdonisJS
  */
 export default class MongodbProvider {
-  private manager?: MongoDatabaseManager
+  protected app: ApplicationService
 
-  constructor(protected app: ApplicationService) {}
+  constructor(app: ApplicationService) {
+    this.app = app
+  }
+
+  private manager?: MongoDatabaseManager
 
   /**
    * Register bindings to the container
