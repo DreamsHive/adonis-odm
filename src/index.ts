@@ -79,6 +79,25 @@ export type {
   TransactionOptions,
   ModelOperationOptions,
   DatabaseManager,
+  // Relationship types
+  HasOne,
+  HasMany,
+  BelongsTo,
+  RelationshipKeys,
+  RelatedModelType,
+  RelationshipMetadata,
+  TypeSafeLoadCallback,
+  // Relationship inference types
+  EmbeddedKeys,
+  AllRelationshipKeys,
+  LoadRelationConstraint,
+  EmbedRelationConstraint,
+  HasRelationships,
+  HasEmbeddedRelationships,
+  ExtractRelatedModel,
+  ExtractEmbeddedModelClass,
+  IsEmbeddedRelation,
+  IsReferencedRelation,
 } from './types/index.js'
 
 export type {
@@ -88,11 +107,6 @@ export type {
   EmbeddedCreationAttributes,
   CreateAttributes,
 } from './types/embedded.js'
-
-export type {
-  LoadRelationConstraint,
-  EmbedRelationConstraint,
-} from './types/relationship_inference.js'
 
 // Exceptions
 export {

@@ -36,6 +36,31 @@ export type {
   EmbeddedQueryBuilder,
 } from './embedded.js'
 
+// Export relationship types
+export type {
+  HasOne,
+  HasMany,
+  BelongsTo,
+  RelationshipKeys,
+  RelatedModelType,
+  RelationshipMetadata,
+  TypeSafeLoadCallback,
+} from './relationships.js'
+
+// Export relationship inference types
+export type {
+  EmbeddedKeys,
+  AllRelationshipKeys,
+  LoadRelationConstraint,
+  EmbedRelationConstraint,
+  HasRelationships,
+  HasEmbeddedRelationships,
+  ExtractRelatedModel,
+  ExtractEmbeddedModelClass,
+  IsEmbeddedRelation,
+  IsReferencedRelation,
+} from './relationship_inference.js'
+
 /**
  * Date column decorator options
  */
