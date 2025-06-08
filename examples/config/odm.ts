@@ -56,6 +56,20 @@ const odmConfig: OdmConfig = {
       useUnifiedTopology: true,
     },
   },
+
+  /*
+  |--------------------------------------------------------------------------
+  | Seeders Configuration
+  |--------------------------------------------------------------------------
+  |
+  | Configure the database seeders for your application. Seeders are used
+  | to populate your database with initial or test data.
+  |
+  */
+  seeders: {
+    paths: ['./database/seeders'],
+    defaultConnection: 'mongodb',
+  },
 }
 
 export default odmConfig

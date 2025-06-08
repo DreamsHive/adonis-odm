@@ -4,12 +4,14 @@ import { MongoDatabaseManager } from '../src/database_manager.js'
 import { BaseModel } from '../src/base_model/base_model.js'
 import { ModelQueryBuilder } from '../src/query_builder/model_query_builder.js'
 import { PersistenceManager } from '../src/base_model/persistence_manager.js'
+import { SeederManager } from '../src/seeders/seeder_manager.js'
 import { OdmConfig } from '../src/types/index.js'
 
 declare module '@adonisjs/core/types' {
   interface ContainerBindings {
     'mongodb.manager': MongoDatabaseManager
     'mongodb': MongoDatabaseManager
+    'odm.seeder': SeederManager
   }
 }
 
@@ -50,6 +52,16 @@ export default class MongodbProvider {
 
     // Also register the class itself for the service pattern
     this.app.container.bind(MongoDatabaseManager, () => this.manager!)
+
+    // Register SeederManager as a singleton
+    this.app.container.singleton('odm.seeder', () => {
+      return new SeederManager(config, this.manager!)
+    })
+
+    // Also register the class itself for the service pattern
+    this.app.container.bind(SeederManager, () => {
+      return this.app.container.make('odm.seeder')
+    })
   }
 
   /**

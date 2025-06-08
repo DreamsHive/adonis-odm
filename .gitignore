@@ -361,3 +361,23 @@ development.db
 # .vscode/tasks.json - Build and test tasks
 # .vscode/launch.json - Debug configurations
 # .vscode/extensions.json - Recommended extensions
+
+# Added by Task Master AI
+logs
+dev-debug.log
+# Dependency directories
+# Environment variables
+# Editor directories and files
+.idea
+.vscode
+.roo
+.taskmaster
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+# OS specific
+# Task files
+tasks.json
+tasks/

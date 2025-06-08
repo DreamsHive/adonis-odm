@@ -20,7 +20,7 @@ export type { MongoTransactionClient } from './transaction_client.js'
 export { ConcreteMongoTransactionClient } from './transaction_client.js'
 
 // Configuration
-export { defineConfig } from './config/odm_config.js'
+export { defineConfig, getSeederConfig } from './config/odm_config.js'
 
 // Decorators
 export { column, computed, hasOne, hasMany, belongsTo } from './decorators/column.js'
@@ -62,6 +62,10 @@ export {
 // Utilities
 export { NestedDocumentHelpers } from './utils/nested_document_helpers.js'
 
+// Seeders
+export { BaseSeeder, SeederManager } from './seeders/index.js'
+export type { SeederRunOptions, SeederResult } from './seeders/index.js'
+
 // Types and Interfaces
 export type {
   ColumnOptions,
@@ -69,6 +73,8 @@ export type {
   ModelMetadata,
   MongoConnectionConfig,
   MongoConfig,
+  SeederConfig,
+  OdmConfig,
   QueryOperator,
   QueryValue,
   QueryCondition,

@@ -1,0 +1,169 @@
+{{#var seederName = generators.modelName(entity.name)}}
+{{#var seederFileName = generators.modelFileName(entity.name)}}
+{{{
+  exports({
+    to: app.seedersPath ? app.seedersPath(entity.path, seederFileName) : `database/seeders/${entity.path ? entity.path + '/' : ''}${seederFileName}.ts`
+  })
+}}}
+import { BaseSeeder } from 'adonis-odm/seeders'
+import { ObjectId } from 'mongodb'
+
+/**
+ * {{ seederName }} seeder with advanced features
+ * 
+ * This seeder demonstrates advanced seeding patterns including:
+ * - Environment-specific data
+ * - Relationship handling
+ * - Conditional seeding
+ * - Error handling
+ * - Progress tracking
+ */
+export default class {{ seederName }} extends BaseSeeder {
+  /**
+   * Environment restrictions
+   * This seeder will only run in development and testing environments
+   */
+  static environment = ['development', 'testing']
+
+  /**
+   * Run the seeder with advanced patterns
+   */
+  async run(): Promise<void> {
+    try {
+      console.log(`🌱 Starting {{ seederName }}...`)
+
+      // Check if data already exists to avoid duplicates
+      const collection = this.getCollection('{{ entity.name.toLowerCase() }}s')
+      const existingCount = await collection.countDocuments()
+
+      if (existingCount > 0) {
+        console.log(`⏭️  {{ seederName }} skipped: ${existingCount} records already exist`)
+        return
+      }
+
+      // Environment-specific data
+      const environment = process.env.NODE_ENV || 'development'
+      const seedData = this.getSeedData(environment)
+
+      // Batch insert for better performance
+      const batchSize = 100
+      const batches = this.chunkArray(seedData, batchSize)
+
+      let totalInserted = 0
+      for (const [index, batch] of batches.entries()) {
+        await collection.insertMany(batch)
+        totalInserted += batch.length
+        
+        console.log(`📦 Batch ${index + 1}/${batches.length} completed (${totalInserted}/${seedData.length} records)`)
+      }
+
+      console.log(`✅ {{ seederName }} completed: ${totalInserted} records inserted`)
+
+    } catch (error) {
+      console.error(`❌ {{ seederName }} failed:`, error)
+      throw error
+    }
+  }
+
+  /**
+   * Get environment-specific seed data
+   */
+  private getSeedData(environment: string) {
+    const baseData = [
+      {
+        _id: new ObjectId(),
+        name: 'Sample {{ entity.name }} 1',
+        email: 'sample1@example.com',
+        status: 'active',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        _id: new ObjectId(),
+        name: 'Sample {{ entity.name }} 2',
+        email: 'sample2@example.com',
+        status: 'active',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ]
+
+    // Add more data for development environment
+    if (environment === 'development') {
+      for (let i = 3; i <= 50; i++) {
+        baseData.push({
+          _id: new ObjectId(),
+          name: `Sample {{ entity.name }} ${i}`,
+          email: `sample${i}@example.com`,
+          status: i % 5 === 0 ? 'inactive' : 'active',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
+      }
+    }
+
+    return baseData
+  }
+
+  /**
+   * Split array into chunks for batch processing
+   */
+  private chunkArray<T>(array: T[], size: number): T[][] {
+    const chunks: T[][] = []
+    for (let i = 0; i < array.length; i += size) {
+      chunks.push(array.slice(i, i + size))
+    }
+    return chunks
+  }
+
+  /**
+   * Example: Seeding with relationships
+   */
+  private async seedWithRelationships() {
+    // Example of seeding related data
+    const usersCollection = this.getCollection('users')
+    const postsCollection = this.getCollection('posts')
+
+    // Insert users first
+    const users = await usersCollection.insertMany([
+      { name: 'John Doe', email: 'john@example.com' },
+      { name: 'Jane Smith', email: 'jane@example.com' },
+    ])
+
+    // Insert posts with user references
+    await postsCollection.insertMany([
+      {
+        title: 'First Post',
+        content: 'This is the first post',
+        authorId: users.insertedIds[0],
+        createdAt: new Date(),
+      },
+      {
+        title: 'Second Post',
+        content: 'This is the second post',
+        authorId: users.insertedIds[1],
+        createdAt: new Date(),
+      },
+    ])
+  }
+
+  /**
+   * Example: Using transactions for data consistency
+   */
+  private async seedWithTransaction() {
+    const session = this.client.startSession()
+
+    try {
+      await session.withTransaction(async () => {
+        const collection = this.getCollection('{{ entity.name.toLowerCase() }}s')
+        
+        await collection.insertMany([
+          { name: 'Transactional Record 1', createdAt: new Date() },
+          { name: 'Transactional Record 2', createdAt: new Date() },
+        ], { session })
+      })
+    } finally {
+      await session.endSession()
+    }
+  }
+}

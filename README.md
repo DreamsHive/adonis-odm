@@ -29,8 +29,9 @@ A comprehensive MongoDB Object Document Mapper (ODM) for AdonisJS v6 that provid
 - 🔗 **Relationships**: Type-safe referenced relationships (@hasOne, @hasMany, @belongsTo)
 - 🪝 **Lifecycle Hooks**: Comprehensive hook system (beforeSave, afterSave, beforeCreate, etc.)
 - 🔍 **Advanced Querying**: Complex filtering, aggregation, and embedded document querying
+- 🌱 **Database Seeders**: Comprehensive seeding system with environment control, execution ordering, and dependency management
 - ⚡ **Performance**: Bulk operations, connection pooling, and optimized queries
-- 🛠️ **CLI Tools**: Ace commands for model generation and database operations
+- 🛠️ **CLI Tools**: Ace commands for model generation, seeders, and database operations
 - 🧪 **Testing Support**: Built-in testing utilities and Docker integration
 
 ## Installation
@@ -174,6 +175,28 @@ node ace configure adonis-odm
 node ace make:odm-model User
 ```
 
+### Database Seeders
+
+```bash
+# Create a new seeder
+node ace make:odm-seeder User
+
+# Create seeder in subdirectory
+node ace make:odm-seeder admin/User
+
+# Run all seeders
+node ace odm:seed
+
+# Run specific seeder files
+node ace odm:seed --files="./database/seeders/user_seeder.ts"
+
+# Run seeders interactively
+node ace odm:seed --interactive
+
+# Run seeders for specific connection
+node ace odm:seed --connection=analytics
+```
+
 ### Database Operations
 
 ```bash
@@ -183,6 +206,302 @@ node ace mongodb:status
 # Show database information (coming soon)
 node ace mongodb:info
 ```
+
+## Database Seeders
+
+Adonis ODM provides a comprehensive seeding system to populate your MongoDB database with initial or test data. The seeder system follows familiar AdonisJS Lucid patterns while providing MongoDB-specific features and advanced execution control.
+
+### Quick Start
+
+#### Creating a Seeder
+
+Generate a new seeder using the ace command:
+
+```bash
+# Create a basic seeder
+node ace make:odm-seeder User
+
+# Create seeder in subdirectory
+node ace make:odm-seeder admin/User
+
+# Use different templates
+node ace make:odm-seeder User --stub=simple
+node ace make:odm-seeder User --stub=advanced
+```
+
+This creates a seeder file in `database/seeders/user_seeder.ts`:
+
+```typescript
+import { BaseSeeder } from 'adonis-odm/seeders'
+import User from '#models/user'
+
+export default class UserSeeder extends BaseSeeder {
+  async run() {
+    // Insert seed data
+    await User.createMany([
+      {
+        name: 'John Doe',
+        email: 'john@example.com',
+        age: 30,
+      },
+      {
+        name: 'Jane Smith',
+        email: 'jane@example.com',
+        age: 28,
+      },
+    ])
+  }
+}
+```
+
+#### Running Seeders
+
+```bash
+# Run all seeders
+node ace odm:seed
+
+# Run specific seeder files
+node ace odm:seed --files="./database/seeders/user_seeder.ts"
+
+# Run seeders interactively (choose which ones to run)
+node ace odm:seed --interactive
+
+# Run seeders for specific connection
+node ace odm:seed --connection=analytics
+```
+
+### Advanced Features
+
+#### Environment-Specific Seeders
+
+Control which environments your seeders run in:
+
+```typescript
+import { BaseSeeder } from 'adonis-odm/seeders'
+import User from '#models/user'
+
+export default class UserSeeder extends BaseSeeder {
+  // Only run in development and testing
+  static environment = ['development', 'testing']
+
+  async run() {
+    await User.createMany([{ name: 'Test User', email: 'test@example.com' }])
+  }
+}
+```
+
+#### Custom Execution Order
+
+Control the order in which seeders execute using static properties:
+
+```typescript
+import { BaseSeeder } from 'adonis-odm/seeders'
+import Role from '#models/role'
+
+export default class RoleSeeder extends BaseSeeder {
+  // Lower numbers run first
+  static order = 1
+
+  async run() {
+    await Role.createMany([
+      { name: 'admin', permissions: ['*'] },
+      { name: 'user', permissions: ['read'] },
+    ])
+  }
+}
+```
+
+#### Seeder Dependencies
+
+Define dependencies between seeders to ensure proper execution order:
+
+```typescript
+import { BaseSeeder } from 'adonis-odm/seeders'
+import User from '#models/user'
+
+export default class UserSeeder extends BaseSeeder {
+  static order = 2
+  static dependencies = ['RoleSeeder'] // Must run after RoleSeeder
+
+  async run() {
+    const adminRole = await Role.findBy('name', 'admin')
+
+    await User.createMany([
+      {
+        name: 'Admin User',
+        email: 'admin@example.com',
+        roleId: adminRole._id,
+      },
+    ])
+  }
+}
+```
+
+#### Main Seeders
+
+Create main seeder files (`index.ts` or `main.ts`) that automatically run first:
+
+```typescript
+// database/seeders/index.ts
+import { BaseSeeder } from 'adonis-odm/seeders'
+
+export default class MainSeeder extends BaseSeeder {
+  // Main seeders automatically get order = 0
+
+  async run() {
+    // Run essential setup logic
+    console.log('🌱 Starting database seeding...')
+  }
+}
+```
+
+### Working with Different Data Types
+
+#### Embedded Documents
+
+Seed models with embedded documents:
+
+```typescript
+import { BaseSeeder } from 'adonis-odm/seeders'
+import User from '#models/user'
+
+export default class UserSeeder extends BaseSeeder {
+  async run() {
+    await User.createMany([
+      {
+        email: 'john@example.com',
+        profile: {
+          firstName: 'John',
+          lastName: 'Doe',
+          bio: 'Software Developer',
+          age: 30,
+        },
+        addresses: [
+          {
+            type: 'home',
+            street: '123 Main St',
+            city: 'New York',
+            zipCode: '10001',
+          },
+          {
+            type: 'work',
+            street: '456 Office Blvd',
+            city: 'New York',
+            zipCode: '10002',
+          },
+        ],
+      },
+    ])
+  }
+}
+```
+
+#### Referenced Relationships
+
+Seed models with relationships:
+
+```typescript
+import { BaseSeeder } from 'adonis-odm/seeders'
+import User from '#models/user'
+import Post from '#models/post'
+
+export default class PostSeeder extends BaseSeeder {
+  static dependencies = ['UserSeeder']
+
+  async run() {
+    const users = await User.all()
+
+    for (const user of users) {
+      await Post.createMany([
+        {
+          title: `${user.name}'s First Post`,
+          content: 'This is my first blog post!',
+          authorId: user._id,
+          isPublished: true,
+        },
+        {
+          title: `${user.name}'s Draft`,
+          content: 'Work in progress...',
+          authorId: user._id,
+          isPublished: false,
+        },
+      ])
+    }
+  }
+}
+```
+
+### Connection-Specific Seeding
+
+Use different database connections for different seeders:
+
+```typescript
+import { BaseSeeder } from 'adonis-odm/seeders'
+import AnalyticsEvent from '#models/analytics_event'
+
+export default class AnalyticsSeeder extends BaseSeeder {
+  // Specify connection in the seeder
+  connection = 'analytics'
+
+  async run() {
+    await AnalyticsEvent.createMany([
+      {
+        event: 'user_signup',
+        userId: 'user123',
+        timestamp: new Date(),
+        metadata: { source: 'web' },
+      },
+    ])
+  }
+}
+```
+
+Or specify connection when running:
+
+```bash
+# Run all seeders on analytics connection
+node ace odm:seed --connection=analytics
+```
+
+### Error Handling and Validation
+
+Seeders include comprehensive error handling:
+
+```typescript
+import { BaseSeeder } from 'adonis-odm/seeders'
+import User from '#models/user'
+
+export default class UserSeeder extends BaseSeeder {
+  async run() {
+    try {
+      // Check if data already exists
+      const existingUsers = await User.query().limit(1)
+      if (existingUsers.length > 0) {
+        console.log('Users already exist, skipping seeder')
+        return
+      }
+
+      await User.createMany([{ name: 'John Doe', email: 'john@example.com' }])
+
+      console.log('✅ Users seeded successfully')
+    } catch (error) {
+      console.error('❌ Error seeding users:', error.message)
+      throw error // Re-throw to mark seeder as failed
+    }
+  }
+}
+```
+
+### Best Practices
+
+1. **Use Environment Restrictions**: Prevent test data from appearing in production
+2. **Define Clear Dependencies**: Use `static dependencies` for complex seeding scenarios
+3. **Check for Existing Data**: Avoid duplicate data by checking before inserting
+4. **Use Transactions**: Wrap complex seeding logic in database transactions
+5. **Provide Feedback**: Use console.log to show seeding progress
+6. **Handle Errors Gracefully**: Implement proper error handling and cleanup
+
+For more detailed examples and advanced usage patterns, see the [seeder documentation](docs/environment-specific-seeders.md) and [examples](examples/seeder_usage.ts).
 
 ## Usage
 

@@ -1,0 +1,65 @@
+{{#var seederName = generators.modelName(entity.name)}}
+{{#var seederFileName = generators.modelFileName(entity.name)}}
+{{{
+  exports({
+    to: app.seedersPath ? app.seedersPath(entity.path, seederFileName) : `database/seeders/${entity.path ? entity.path + '/' : ''}${seederFileName}.ts`
+  })
+}}}
+import { BaseSeeder } from 'adonis-odm/seeders'
+
+/**
+ * {{ seederName }} seeder
+ * 
+ * This seeder is responsible for populating the database with {{ entity.name }} data.
+ * You can specify environment restrictions by setting the static environment property.
+ * 
+ * @example
+ * ```typescript
+ * // Only run in development and testing environments
+ * static environment = ['development', 'testing']
+ * ```
+ */
+export default class {{ seederName }} extends BaseSeeder {
+  /**
+   * Environment restrictions (optional)
+   * 
+   * Uncomment and modify the line below to restrict this seeder to specific environments.
+   * If not specified, the seeder will run in all environments.
+   */
+  // static environment = ['development', 'testing']
+
+  /**
+   * Run the seeder
+   * 
+   * This method contains the actual seeding logic. Use the database manager
+   * to insert data into your MongoDB collections.
+   */
+  async run(): Promise<void> {
+    // Example: Insert sample data
+    // const collection = this.getCollection('{{ entity.name.toLowerCase() }}s')
+    // 
+    // await collection.insertMany([
+    //   {
+    //     name: 'Sample {{ entity.name }}',
+    //     email: 'sample@example.com',
+    //     createdAt: new Date(),
+    //     updatedAt: new Date(),
+    //   },
+    //   // Add more sample data as needed
+    // ])
+
+    // Example: Using ODM models (if available)
+    // const {{ entity.name }} = (await import('#models/{{ entity.name.toLowerCase() }}')).default
+    // 
+    // await {{ entity.name }}.createMany([
+    //   {
+    //     name: 'Sample {{ entity.name }}',
+    //     email: 'sample@example.com',
+    //   },
+    //   // Add more sample data as needed
+    // ])
+
+    // TODO: Implement your seeding logic here
+    console.log('{{ seederName }} executed successfully')
+  }
+}

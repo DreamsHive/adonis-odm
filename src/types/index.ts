@@ -118,6 +118,31 @@ export interface MongoConnectionConfig {
 }
 
 /**
+ * Seeder metadata for execution ordering and dependencies
+ */
+export interface SeederMetadata {
+  /** Execution order (lower numbers run first, default: 999) */
+  order?: number
+
+  /** Array of seeder names this seeder depends on */
+  dependencies?: string[]
+
+  /** Whether this is a main seeder file (index.ts or main.ts) */
+  isMainSeeder?: boolean
+}
+
+/**
+ * Seeder configuration options
+ */
+export interface SeederConfig {
+  /** Array of paths where seeder files are located */
+  paths?: string[]
+
+  /** Default connection name to use for seeders */
+  defaultConnection?: string
+}
+
+/**
  * ODM configuration for NoSQL databases
  *
  * @example
@@ -134,6 +159,10 @@ export interface MongoConnectionConfig {
  *       },
  *     },
  *   },
+ *   seeders: {
+ *     paths: ['./database/seeders'],
+ *     defaultConnection: 'mongodb',
+ *   },
  * })
  * ```
  */
@@ -143,6 +172,9 @@ export interface OdmConfig {
 
   /** Named connection configurations */
   connections: Record<string, MongoConnectionConfig>
+
+  /** Seeder configuration options */
+  seeders?: SeederConfig
 }
 
 /**

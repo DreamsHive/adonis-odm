@@ -1,0 +1,101 @@
+version: '3.8'
+
+services:
+  # Primary MongoDB instance for integration tests
+  mongodb-test:
+    image: mongo:7.0
+    container_name: adonis-odm-test-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password
+      MONGO_INITDB_DATABASE: adonis_odm_test
+    volumes:
+      - mongodb_test_data:/data/db
+      - ./scripts/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+    networks:
+      - adonis-odm-test
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # Secondary MongoDB instance for multi-connection tests
+  mongodb-secondary:
+    image: mongo:7.0
+    container_name: adonis-odm-test-mongo-secondary
+    restart: unless-stopped
+    ports:
+      - "27018:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password
+      MONGO_INITDB_DATABASE: adonis_odm_test_secondary
+    volumes:
+      - mongodb_secondary_data:/data/db
+    networks:
+      - adonis-odm-test
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # Tenant MongoDB instance for tenant-specific tests
+  mongodb-tenant:
+    image: mongo:7.0
+    container_name: adonis-odm-test-mongo-tenant
+    restart: unless-stopped
+    ports:
+      - "27019:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password
+      MONGO_INITDB_DATABASE: adonis_odm_test_tenant
+    volumes:
+      - mongodb_tenant_data:/data/db
+    networks:
+      - adonis-odm-test
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # MongoDB Express for database management during testing (optional)
+  mongo-express:
+    image: mongo-express:1.0.2
+    container_name: adonis-odm-test-mongo-express
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: admin
+      ME_CONFIG_MONGODB_ADMINPASSWORD: password
+      ME_CONFIG_MONGODB_URL: mongodb://admin:password@mongodb-test:27017/
+      ME_CONFIG_BASICAUTH: false
+    networks:
+      - adonis-odm-test
+    depends_on:
+      mongodb-test:
+        condition: service_healthy
+    profiles:
+      - tools
+
+volumes:
+  mongodb_test_data:
+    driver: local
+  mongodb_secondary_data:
+    driver: local
+  mongodb_tenant_data:
+    driver: local
+
+networks:
+  adonis-odm-test:
+    driver: bridge

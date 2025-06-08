@@ -1,0 +1,21 @@
+{{#var seederName = generators.modelName(entity.name)}}
+{{#var seederFileName = generators.modelFileName(entity.name)}}
+{{{
+  exports({
+    to: app.seedersPath ? app.seedersPath(entity.path, seederFileName) : `database/seeders/${entity.path ? entity.path + '/' : ''}${seederFileName}.ts`
+  })
+}}}
+import { BaseSeeder } from 'adonis-odm/seeders'
+
+export default class {{ seederName }} extends BaseSeeder {
+  async run(): Promise<void> {
+    // TODO: Add your seeding logic here
+    
+    // Example: Insert data using collection directly
+    // const collection = this.getCollection('{{ entity.name.toLowerCase() }}s')
+    // await collection.insertMany([
+    //   { name: 'Sample 1', createdAt: new Date() },
+    //   { name: 'Sample 2', createdAt: new Date() },
+    // ])
+  }
+}

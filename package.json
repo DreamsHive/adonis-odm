@@ -1,6 +1,6 @@
 {
   "name": "adonis-odm",
-  "version": "0.1.3",
+  "version": "0.2.0",
   "private": false,
   "type": "module",
   "license": "MIT",
@@ -14,7 +14,8 @@
     "lucid",
     "relationships",
     "embedded",
-    "transactions"
+    "transactions",
+    "seeders"
   ],
   "author": "DreamsHive <engineers@dreamshive.com>",
   "repository": {
@@ -60,6 +61,11 @@
     "./services/db": {
       "types": "./build/services/db.d.ts",
       "import": "./build/services/db.js"
+    },
+    "./seeders": {
+      "types": "./build/src/seeders/index.d.ts",
+      "import": "./build/src/seeders/index.js",
+      "require": "./build/src/seeders/index.cjs"
     }
   },
   "files": [
@@ -86,10 +92,21 @@
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
     "test": "node --loader ts-node-maintained/esm --test tests/basic.test.ts tests/commands.test.ts",
+    "test:unit": "node --loader ts-node-maintained/esm --test tests/unit/**/*.spec.ts",
     "test:integration": "node --loader ts-node-maintained/esm --test tests/integration.test.ts",
-    "test:all": "node --loader ts-node-maintained/esm --test tests/*.test.ts",
-    "test:watch": "node --loader ts-node-maintained/esm --test --watch tests/*.test.ts",
-    "test:coverage": "c8 node --loader ts-node-maintained/esm --test tests/*.test.ts",
+    "test:integration:new": "node --loader ts-node-maintained/esm --test tests/integration/**/*.integration.test.ts",
+    "test:integration:seeders": "node --loader ts-node-maintained/esm --test tests/integration/seeders.integration.test.ts",
+    "test:integration:commands": "node --loader ts-node-maintained/esm --test tests/integration/commands.integration.test.ts",
+    "test:integration:multi": "node --loader ts-node-maintained/esm --test tests/integration/multi-connection.integration.test.ts",
+    "test:integration:full": "node --loader ts-node-maintained/esm --test tests/integration/index.integration.test.ts",
+    "test:all": "node --loader ts-node-maintained/esm --test tests/*.test.ts tests/unit/**/*.spec.ts",
+    "test:complete": "node --loader ts-node-maintained/esm --test tests/*.test.ts tests/unit/**/*.spec.ts tests/integration/**/*.integration.test.ts",
+    "test:watch": "node --loader ts-node-maintained/esm --test --watch tests/*.test.ts tests/unit/**/*.spec.ts",
+    "test:coverage": "c8 node --loader ts-node-maintained/esm --test tests/*.test.ts tests/unit/**/*.spec.ts tests/integration/**/*.integration.test.ts",
+    "test:seeders": "node --loader ts-node-maintained/esm --test tests/seeders.test.ts tests/unit/seeders/*.spec.ts tests/unit/commands/odm_seed_simple.spec.ts tests/unit/config/seeder_config.spec.ts",
+    "test:setup": "bash scripts/test-setup.sh setup",
+    "test:cleanup": "bash scripts/test-setup.sh cleanup",
+    "test:status": "bash scripts/test-setup.sh status",
     "validate:gitignore": "node scripts/validate-gitignore.js",
     "validate:package": "npm pack --dry-run",
     "validate:exports": "node -e \"console.log('Testing exports...'); const pkg = require('./package.json'); console.log('Exports:', Object.keys(pkg.exports));\"",
@@ -128,6 +145,7 @@
   },
   "dependencies": {
     "@adonisjs/core": "^6.18.0",
+    "@poppinss/prompts": "^3.1.4",
     "@vinejs/vine": "^3.0.1",
     "luxon": "^3.6.1",
     "mongodb": "^6.16.0",
