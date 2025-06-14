@@ -35,7 +35,7 @@ test('dirty attributes should use database column names (snake_case)', () => {
     code: 'TEST123',
     wallet: '0x123456789',
     username: 'testuser',
-    totalEarning: 10.5
+    totalEarning: 10.5,
   })
 
   // Mark as persisted to simulate an existing record
@@ -50,12 +50,25 @@ test('dirty attributes should use database column names (snake_case)', () => {
   const dirtyAttributes = affiliate.getDirtyAttributes()
 
   // Verify that the dirty attributes use snake_case database column names
-  assert.ok('total_earning' in dirtyAttributes, 'Should have total_earning (snake_case) in dirty attributes')
-  assert.ok(!('totalEarning' in dirtyAttributes), 'Should NOT have totalEarning (camelCase) in dirty attributes')
+  assert.ok(
+    'total_earning' in dirtyAttributes,
+    'Should have total_earning (snake_case) in dirty attributes'
+  )
+  assert.ok(
+    !('totalEarning' in dirtyAttributes),
+    'Should NOT have totalEarning (camelCase) in dirty attributes'
+  )
 
   // Verify the value is correctly serialized for decimal columns
-  assert.ok(dirtyAttributes.total_earning instanceof Decimal128, 'total_earning should be serialized as Decimal128')
-  assert.equal(dirtyAttributes.total_earning.toString(), '10.6', 'Decimal128 should contain correct value')
+  assert.ok(
+    dirtyAttributes.total_earning instanceof Decimal128,
+    'total_earning should be serialized as Decimal128'
+  )
+  assert.equal(
+    dirtyAttributes.total_earning.toString(),
+    '10.6',
+    'Decimal128 should contain correct value'
+  )
 
   // Verify other properties are not in dirty attributes
   assert.equal(Object.keys(dirtyAttributes).length, 1, 'Should only have one dirty attribute')
@@ -90,7 +103,7 @@ test('dirty attributes should handle multiple property changes with naming strat
     lastName: 'Doe',
     emailAddress: 'john@example.com',
     accountBalance: 100.0,
-    isActive: true
+    isActive: true,
   })
 
   model.$isPersisted = true
@@ -112,14 +125,31 @@ test('dirty attributes should handle multiple property changes with naming strat
 
   // Verify camelCase properties are NOT present
   assert.ok(!('firstName' in dirtyAttributes), 'Should NOT have firstName in dirty attributes')
-  assert.ok(!('emailAddress' in dirtyAttributes), 'Should NOT have emailAddress in dirty attributes')
-  assert.ok(!('accountBalance' in dirtyAttributes), 'Should NOT have accountBalance in dirty attributes')
+  assert.ok(
+    !('emailAddress' in dirtyAttributes),
+    'Should NOT have emailAddress in dirty attributes'
+  )
+  assert.ok(
+    !('accountBalance' in dirtyAttributes),
+    'Should NOT have accountBalance in dirty attributes'
+  )
 
   // Verify values are correct
   assert.equal(dirtyAttributes.first_name, 'Jane', 'first_name should have correct value')
-  assert.equal(dirtyAttributes.email_address, 'jane@example.com', 'email_address should have correct value')
-  assert.ok(dirtyAttributes.account_balance instanceof Decimal128, 'account_balance should be Decimal128')
-  assert.equal(dirtyAttributes.account_balance.toString(), '150.25', 'account_balance should have correct value')
+  assert.equal(
+    dirtyAttributes.email_address,
+    'jane@example.com',
+    'email_address should have correct value'
+  )
+  assert.ok(
+    dirtyAttributes.account_balance instanceof Decimal128,
+    'account_balance should be Decimal128'
+  )
+  assert.equal(
+    dirtyAttributes.account_balance.toString(),
+    '150.25',
+    'account_balance should have correct value'
+  )
 
   // Verify unchanged properties are not in dirty attributes
   assert.ok(!('last_name' in dirtyAttributes), 'Should NOT have last_name in dirty attributes')
@@ -153,15 +183,21 @@ test('dirty attributes should skip computed and reference properties', () => {
   model.$dirty = {
     firstName: 'Jane',
     virtualProperty: 'virtual',
-    computedProperty: 'computed'
+    computedProperty: 'computed',
   }
 
   const dirtyAttributes = model.getDirtyAttributes()
 
   // Should only include regular columns, not reference or computed
   assert.ok('first_name' in dirtyAttributes, 'Should have first_name in dirty attributes')
-  assert.ok(!('virtual_property' in dirtyAttributes), 'Should NOT have virtual_property in dirty attributes')
-  assert.ok(!('computed_property' in dirtyAttributes), 'Should NOT have computed_property in dirty attributes')
+  assert.ok(
+    !('virtual_property' in dirtyAttributes),
+    'Should NOT have virtual_property in dirty attributes'
+  )
+  assert.ok(
+    !('computed_property' in dirtyAttributes),
+    'Should NOT have computed_property in dirty attributes'
+  )
 
   assert.equal(Object.keys(dirtyAttributes).length, 1, 'Should only have one dirty attribute')
   assert.equal(dirtyAttributes.first_name, 'Jane', 'first_name should have correct value')
