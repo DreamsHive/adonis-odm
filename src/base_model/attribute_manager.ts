@@ -129,9 +129,38 @@ export class AttributeManager {
 
   /**
    * Get dirty attributes
+   * Returns attributes with database column names (snake_case) for database operations
    */
   getDirtyAttributes(): Record<string, any> {
-    return { ...this.model.$dirty }
+    const metadata = (this.model.constructor as typeof BaseModel).getMetadata()
+    const namingStrategy = (this.model.constructor as typeof BaseModel).namingStrategy
+    const dirtyAttributes: Record<string, any> = {}
+
+    // Convert property names to database column names and apply serialization
+    for (const [propertyName, value] of Object.entries(this.model.$dirty)) {
+      const columnOptions = metadata.columns.get(propertyName)
+
+      // Skip reference fields (virtual properties) and computed properties
+      if (columnOptions?.isReference || columnOptions?.isComputed) {
+        continue
+      }
+
+      // Convert property name to database column name using naming strategy
+      const dbColumnName = namingStrategy.columnName(
+        this.model.constructor as typeof BaseModel,
+        propertyName
+      )
+
+      // Apply serialization if defined for this column
+      let serializedValue = value
+      if (columnOptions?.serialize) {
+        serializedValue = columnOptions.serialize(value)
+      }
+
+      dirtyAttributes[dbColumnName] = serializedValue
+    }
+
+    return dirtyAttributes
   }
 
   /**
