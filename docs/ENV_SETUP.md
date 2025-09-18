@@ -1,8 +1,10 @@
 # Environment Setup for MongoDB ODM
 
-## Required .env Configuration
+## .env Configuration Options
 
-Create a `.env` file in your project root with the following configuration:
+Create a `.env` file in your project root. You can choose between two configuration approaches:
+
+### Option 1: Using MongoDB URI (Recommended)
 
 ```env
 NODE_ENV=development
@@ -11,9 +13,30 @@ APP_KEY=your-app-key-here
 HOST=0.0.0.0
 LOG_LEVEL=info
 
-# MongoDB Configuration
+# MongoDB Configuration - URI approach
 MONGO_CONNECTION=mongodb
 MONGO_URI=mongodb://adonis_user:adonis_password@localhost:27017/adonis_mongo
+
+# MongoDB Connection Pool Settings (optional)
+MONGO_MAX_POOL_SIZE=10
+MONGO_MIN_POOL_SIZE=0
+MONGO_MAX_IDLE_TIME_MS=30000
+MONGO_SERVER_SELECTION_TIMEOUT_MS=5000
+MONGO_SOCKET_TIMEOUT_MS=0
+MONGO_CONNECT_TIMEOUT_MS=10000
+```
+
+### Option 2: Using Granular Configuration
+
+```env
+NODE_ENV=development
+PORT=3333
+APP_KEY=your-app-key-here
+HOST=0.0.0.0
+LOG_LEVEL=info
+
+# MongoDB Configuration - Granular approach
+MONGO_CONNECTION=mongodb
 MONGO_HOST=localhost
 MONGO_PORT=27017
 MONGO_DATABASE=adonis_mongo
@@ -28,6 +51,8 @@ MONGO_SERVER_SELECTION_TIMEOUT_MS=5000
 MONGO_SOCKET_TIMEOUT_MS=0
 MONGO_CONNECT_TIMEOUT_MS=10000
 ```
+
+**Note:** All MongoDB connection variables are now optional. You can use either the URI approach or the granular approach, or mix both (URI takes precedence if provided).
 
 ## For Testing
 

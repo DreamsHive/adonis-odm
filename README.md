@@ -105,14 +105,16 @@ export default odmConfig
 
 ### Environment Variables
 
-The following environment variables are used by the MongoDB configuration:
+The following environment variables are available for MongoDB configuration (all are optional):
 
 ```env
-# Basic Connection Settings
+# Connection Settings (Option 1: Use URI)
+MONGO_URI=mongodb://localhost:27017/your_database_name
+
+# Connection Settings (Option 2: Use individual components)
 MONGO_HOST=localhost
 MONGO_PORT=27017
 MONGO_DATABASE=your_database_name
-MONGO_URI=mongodb://localhost:27017/your_database_name
 
 # Authentication (optional)
 MONGO_USERNAME=your_username
@@ -127,7 +129,18 @@ MONGO_SOCKET_TIMEOUT_MS=0
 MONGO_CONNECT_TIMEOUT_MS=10000
 ```
 
-**Note**: You can use either `MONGO_URI` for a complete connection string, or individual components (`MONGO_HOST`, `MONGO_PORT`, etc.). The URI takes precedence if both are provided.
+**Note**: All MongoDB connection variables are optional. You can use either `MONGO_URI` for a complete connection string, or individual components (`MONGO_HOST`, `MONGO_PORT`, etc.). The URI takes precedence if both are provided.
+
+### Environment Variable Flexibility
+
+As of version 0.2.1+, all MongoDB environment variables are optional, giving you complete flexibility in how you configure your database connection:
+
+- **URI Only**: Use just `MONGO_URI` for simple setups
+- **Components Only**: Use individual variables like `MONGO_HOST`, `MONGO_PORT`, etc.
+- **Mixed**: Combine both approaches (URI takes precedence)
+- **Minimal**: Provide only the variables you need
+
+If you're upgrading from an earlier version and experiencing validation errors, see the [Migration Guide](./docs/MIGRATION_ENV_VARIABLES.md).
 
 ### Multiple Connections
 

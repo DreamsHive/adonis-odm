@@ -59,9 +59,9 @@ export async function configure(command: Configure) {
   await codemods.defineEnvValidations({
     leadingComment: 'Variables for configuring MongoDB ODM',
     variables: {
-      MONGO_HOST: 'Env.schema.string()',
-      MONGO_PORT: 'Env.schema.number()',
-      MONGO_DATABASE: 'Env.schema.string()',
+      MONGO_HOST: 'Env.schema.string.optional()',
+      MONGO_PORT: 'Env.schema.number.optional()',
+      MONGO_DATABASE: 'Env.schema.string.optional()',
       MONGO_URI: 'Env.schema.string.optional()',
       MONGO_USERNAME: 'Env.schema.string.optional()',
       MONGO_PASSWORD: 'Env.schema.string.optional()',
