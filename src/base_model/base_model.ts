@@ -165,14 +165,32 @@ export class BaseModel {
   }
 
   /**
+   * Static collection name property (Lucid pattern)
+   * Override this in your model to specify a custom collection name
+   */
+  static collection?: string
+
+  /**
    * Get collection name for the model
+   *
+   * Priority order:
+   * 1. Static collection property (recommended Lucid pattern)
+   * 2. Metadata tableName (backward compatibility)
+   * 3. Auto-generated from class name
    */
   static getCollectionName(): string {
+    // First priority: static collection property (Lucid pattern)
+    if ((this as any).collection) {
+      return (this as any).collection
+    }
+
+    // Second priority: metadata tableName (for backward compatibility)
     const metadata = this.getMetadata()
     if (metadata.tableName) {
       return metadata.tableName
     }
 
+    // Third priority: auto-generate from class name
     // Convert class name to snake_case and pluralize
     const className = this.name
     const snakeCase = className
@@ -181,13 +199,21 @@ export class BaseModel {
       .replace(/^_/, '')
 
     // Better pluralization logic
-    // Handle common patterns like "User" -> "users", "UserWithProfile" -> "users_with_profiles"
+    // Handle common patterns like "User" -> "users", "AdminUser" -> "admin_users"
     const words = snakeCase.split('_')
 
     // Helper function to pluralize a word
     const pluralize = (word: string): string => {
-      if (word.endsWith('y')) {
-        return word.slice(0, -1) + 'ies'
+      // Handle words ending in 'y' preceded by a consonant
+      if (word.endsWith('y') && word.length > 1) {
+        const beforeY = word[word.length - 2]
+        // If the letter before 'y' is a vowel, just add 's' (e.g., "key" -> "keys")
+        // If it's a consonant, replace 'y' with 'ies' (e.g., "city" -> "cities")
+        if ('aeiou'.includes(beforeY)) {
+          return word + 's'
+        } else {
+          return word.slice(0, -1) + 'ies'
+        }
       } else if (
         word.endsWith('s') ||
         word.endsWith('sh') ||
@@ -201,13 +227,10 @@ export class BaseModel {
       }
     }
 
-    // For compound names like "UserWithReferencedProfile", pluralize both first and last words
-    // This handles cases like "UserProfile" -> "users_profiles" and "UserWithReferencedProfile" -> "users_with_referenced_profiles"
-    if (words.length > 1) {
-      words[0] = pluralize(words[0]) // Pluralize first word (main entity)
-      words[words.length - 1] = pluralize(words[words.length - 1]) // Pluralize last word
-    } else {
-      words[0] = pluralize(words[0]) // Single word, just pluralize it
+    // Pluralize only the last word (the main entity)
+    // Examples: "AdminUser" -> "admin_users", "UserProfile" -> "user_profiles"
+    if (words.length > 0) {
+      words[words.length - 1] = pluralize(words[words.length - 1])
     }
 
     return words.join('_')

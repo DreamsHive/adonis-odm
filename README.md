@@ -562,6 +562,64 @@ export default class User extends BaseModel {
 }
 ```
 
+### Collection Naming
+
+The ODM follows the AdonisJS Lucid pattern for collection naming. You can specify custom collection names using the static `collection` property:
+
+```typescript
+export default class User extends BaseModel {
+  // Lucid pattern: Use static collection property
+  static collection = 'custom_users'
+
+  @column({ isPrimary: true })
+  declare _id: string
+
+  @column()
+  declare name: string
+}
+```
+
+#### Collection Naming Precedence
+
+The ODM determines collection names in the following order:
+
+1. **Static collection property** (Lucid pattern) - Highest priority
+2. **Metadata tableName** (backward compatibility)
+3. **Auto-generated from class name** - Default behavior
+
+```typescript
+// 1. Static collection property (recommended)
+class User extends BaseModel {
+  static collection = 'users' // Uses: 'users'
+}
+
+// 2. Auto-generated from class name (default)
+class AdminUser extends BaseModel {
+  // Auto-generates: 'admin_users'
+}
+
+class APIKey extends BaseModel {
+  // Auto-generates: 'a_p_i_keys'
+}
+
+class UserWithProfile extends BaseModel {
+  // Auto-generates: 'user_with_profiles'
+}
+```
+
+#### Backward Compatibility
+
+The old `getCollectionName()` method is still supported for backward compatibility:
+
+```typescript
+export default class User extends BaseModel {
+  // Still works, but static collection property is preferred
+  static getCollectionName(): string {
+    return 'users'
+  }
+}
+```
+
 ### Embedded Documents
 
 The ODM provides full support for embedded documents with type safety and CRUD operations.
@@ -2672,9 +2730,8 @@ export default class User extends BaseModel {
   @column.dateTime({ autoCreate: true, autoUpdate: true })
   declare updatedAt: DateTime
 
-  static getCollectionName(): string {
-    return 'users'
-  }
+  // Lucid pattern: Use static collection property
+  static collection = 'users'
 }
 ```
 
