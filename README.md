@@ -60,8 +60,10 @@ The configure command will:
 
 1. Register the MongoDB provider inside the `adonisrc.ts` file
 2. Create the `config/odm.ts` configuration file
-3. Add environment variables to your `.env` file
+3. Add environment variables to your `.env` file (preserving existing values)
 4. Set up validation rules for environment variables
+
+> **🔒 Environment Variable Preservation**: The configure command intelligently preserves any existing MongoDB environment variables in your `.env` file. Only new variables that don't already exist will be added, ensuring your custom configuration values are never overwritten.
 
 ## Configuration
 
@@ -127,7 +129,10 @@ MONGO_SOCKET_TIMEOUT_MS=0
 MONGO_CONNECT_TIMEOUT_MS=10000
 ```
 
-**Note**: You can use either `MONGO_URI` for a complete connection string, or individual components (`MONGO_HOST`, `MONGO_PORT`, etc.). The URI takes precedence if both are provided.
+**Notes**:
+
+- You can use either `MONGO_URI` for a complete connection string, or individual components (`MONGO_HOST`, `MONGO_PORT`, etc.). The URI takes precedence if both are provided.
+- When running `node ace configure adonis-odm`, existing environment variables in your `.env` file will be preserved. Only missing variables will be added with default values.
 
 ### Multiple Connections
 
