@@ -346,9 +346,8 @@ class User extends BaseModel {
   @hasMany(() => Post, { localKey: '_id', foreignKey: 'authorId' })
   declare posts: HasMany<typeof Post>
 
-  static getCollectionName(): string {
-    return 'users'
-  }
+  // Lucid pattern: Use static collection property
+  static collection = 'users'
 }
 
 // ✅ Use it seamlessly - no extra steps!

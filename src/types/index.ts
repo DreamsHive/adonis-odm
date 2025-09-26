@@ -254,6 +254,7 @@ export interface ModelConstructor {
   getMetadata(): ModelMetadata
   getCollectionName(): string
   getConnection(): string
+  collection?: string // Static collection property (Lucid pattern)
 }
 
 /**
