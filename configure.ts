@@ -7,9 +7,65 @@
 
 import { getDirname } from '@adonisjs/core/helpers'
 import type Configure from '@adonisjs/core/commands/configure'
+import { readFileSync, existsSync } from 'node:fs'
+import { join } from 'node:path'
 
 // Get the stubs directory path
 const stubsRoot = getDirname(import.meta.url) + '/stubs'
+
+/**
+ * Read existing environment variables from .env file
+ */
+function getExistingEnvVariables(projectRoot: string): Record<string, string> {
+  const envPath = join(projectRoot, '.env')
+  const existingVars: Record<string, string> = {}
+
+  if (existsSync(envPath)) {
+    try {
+      const envContent = readFileSync(envPath, 'utf8')
+      const lines = envContent.split('\n')
+
+      for (const line of lines) {
+        const trimmedLine = line.trim()
+        // Skip empty lines and comments
+        if (!trimmedLine || trimmedLine.startsWith('#')) {
+          continue
+        }
+
+        // Parse KEY=VALUE format
+        const equalIndex = trimmedLine.indexOf('=')
+        if (equalIndex > 0) {
+          const key = trimmedLine.substring(0, equalIndex).trim()
+          const value = trimmedLine.substring(equalIndex + 1).trim()
+          existingVars[key] = value
+        }
+      }
+    } catch (error) {
+      // If we can't read the file, just continue with empty existing vars
+      console.warn('Warning: Could not read existing .env file:', error)
+    }
+  }
+
+  return existingVars
+}
+
+/**
+ * Filter out environment variables that already exist
+ */
+function filterNewEnvVariables(
+  newVars: Record<string, string>,
+  existingVars: Record<string, string>
+): Record<string, string> {
+  const filteredVars: Record<string, string> = {}
+
+  for (const [key, value] of Object.entries(newVars)) {
+    if (!(key in existingVars)) {
+      filteredVars[key] = value
+    }
+  }
+
+  return filteredVars
+}
 
 export async function configure(command: Configure) {
   const codemods = await command.createCodemods()
@@ -36,9 +92,13 @@ export async function configure(command: Configure) {
   })
 
   /**
-   * Update environment variables
+   * Update environment variables (only add new ones, preserve existing)
    */
-  await codemods.defineEnvVariables({
+  const projectRoot = command.app.appRoot.toString()
+  const existingEnvVars = getExistingEnvVariables(projectRoot)
+
+  // Define the environment variables we want to add
+  const mongoEnvVars = {
     MONGO_HOST: 'localhost',
     MONGO_PORT: '27017',
     MONGO_DATABASE: 'your_database_name',
@@ -51,7 +111,25 @@ export async function configure(command: Configure) {
     MONGO_SERVER_SELECTION_TIMEOUT_MS: '5000',
     MONGO_SOCKET_TIMEOUT_MS: '0',
     MONGO_CONNECT_TIMEOUT_MS: '10000',
-  })
+  }
+
+  // Filter out variables that already exist
+  const newEnvVars = filterNewEnvVariables(mongoEnvVars, existingEnvVars)
+
+  // Only add environment variables if there are new ones to add
+  if (Object.keys(newEnvVars).length > 0) {
+    await codemods.defineEnvVariables(newEnvVars)
+    console.log('✅ Added new MongoDB environment variables to .env file')
+    console.log('📝 New variables added:', Object.keys(newEnvVars).join(', '))
+  } else {
+    console.log('ℹ️  All MongoDB environment variables already exist in .env file')
+  }
+
+  // Show which variables were preserved
+  const preservedVars = Object.keys(mongoEnvVars).filter((key) => key in existingEnvVars)
+  if (preservedVars.length > 0) {
+    console.log('🔒 Preserved existing variables:', preservedVars.join(', '))
+  }
 
   /**
    * Update .env.example file

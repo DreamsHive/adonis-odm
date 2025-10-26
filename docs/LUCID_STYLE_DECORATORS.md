@@ -156,9 +156,8 @@ class User extends BaseModel {
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
 
-  static getCollectionName(): string {
-    return 'users'
-  }
+  // Lucid pattern: Use static collection property
+  static collection = 'users'
 }
 
 // Profile model with belongsTo relationship
@@ -218,9 +217,8 @@ class Post extends BaseModel {
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
 
-  static getCollectionName(): string {
-    return 'posts'
-  }
+  // Lucid pattern: Use static collection property
+  static collection = 'posts'
 }
 
 // All relationships have direct property access! No .related needed.
