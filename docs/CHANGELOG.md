@@ -9,7 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Environment Variable Preservation**: Fixed configure script to preserve existing environment variables in `.env` file instead of overwriting them. The configure command now intelligently checks for existing MongoDB environment variables and only adds new ones that don't already exist, ensuring user's custom configuration values are never lost.
+- **Environment Variables**: Made all MongoDB connection environment variables optional in the configuration schema
+  - `MONGO_HOST`, `MONGO_PORT`, and `MONGO_DATABASE` are now optional instead of required
+  - Users can now choose between URI-only configuration (`MONGO_URI`) or granular configuration
+  - Resolves validation errors when users prefer to use only `MONGO_URI`
+  - Added migration guide for existing projects: `docs/MIGRATION_ENV_VARIABLES.md`
+
+### Changed
+
+- Updated documentation to clarify that all MongoDB environment variables are optional
+- Enhanced environment setup guide with multiple configuration approaches
 
 ## [0.1.0] - 2025-01-XX
 
