@@ -77,8 +77,14 @@ export default class MongodbProvider {
    */
   async start() {
     // Connect to MongoDB when the application starts
+    // Skip auto-connection if autoConnect is explicitly set to false in config
     if (this.manager) {
-      await this.manager.connect()
+      const config = this.app.config.get<OdmConfig>('odm')
+      const shouldAutoConnect = config?.autoConnect !== false
+
+      if (shouldAutoConnect) {
+        await this.manager.connect()
+      }
     }
   }
 

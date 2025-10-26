@@ -100,6 +100,10 @@ const odmConfig = defineConfig({
       },
     },
   },
+
+  // Auto-connect to MongoDB when the application starts
+  // Set to false in test environments to prevent connection attempts
+  autoConnect: env.get('NODE_ENV') !== 'test',
 })
 
 export default odmConfig
@@ -143,6 +147,49 @@ As of version 0.2.1+, all MongoDB environment variables are optional, giving you
 - **Minimal**: Provide only the variables you need
 
 If you're upgrading from an earlier version and experiencing validation errors, see the [Migration Guide](./docs/MIGRATION_ENV_VARIABLES.md).
+
+### Auto-Connect Configuration
+
+The `autoConnect` option controls whether the MongoDB provider automatically connects to the database when the application starts. This is particularly useful for testing scenarios:
+
+```typescript
+const odmConfig = defineConfig({
+  connection: 'mongodb',
+  connections: {
+    // ... your connections
+  },
+
+  // Disable auto-connect in test environments
+  autoConnect: env.get('NODE_ENV') !== 'test',
+})
+```
+
+**Benefits:**
+
+- **Unit Testing**: Run unit tests without requiring a MongoDB server
+- **CI/CD Pipelines**: Tests can run in environments without database access
+- **Development Flexibility**: Control when database connections are established
+
+**Default Behavior:**
+
+- If `autoConnect` is not specified, it defaults to `true`
+- When set to `false`, you must manually call `await db.connect()` to establish connections
+- The provider will still register all services and models, just without connecting to MongoDB
+
+**Example: Manual Connection**
+
+```typescript
+import db from '#services/db'
+
+// Manually connect when needed
+await db.connect()
+
+// Your application logic
+const users = await User.all()
+
+// Close connections when done
+await db.close()
+```
 
 ### Multiple Connections
 
@@ -2758,9 +2805,44 @@ export default class User extends BaseModel {
 
 The MongoDB ODM provides comprehensive testing support with both unit tests and integration tests.
 
+### Unit Testing Without MongoDB
+
+As of version 0.2.1+, you can run unit tests without requiring a MongoDB server by using the `autoConnect` configuration option:
+
+```typescript
+// config/odm.ts
+import env from '#start/env'
+import { defineConfig } from 'adonis-odm'
+
+export default defineConfig({
+  connection: 'mongodb',
+  connections: {
+    mongodb: {
+      client: 'mongodb',
+      connection: {
+        url: env.get('MONGO_URI'),
+      },
+    },
+  },
+
+  // Disable auto-connect in test environments
+  autoConnect: env.get('NODE_ENV') !== 'test',
+})
+```
+
+With this configuration, when `NODE_ENV=test`, the MongoDB provider will not attempt to connect to the database during application startup. This allows you to:
+
+- Run unit tests in CI/CD pipelines without MongoDB
+- Test business logic without database dependencies
+- Use mocks and stubs for database operations
+- Speed up test execution
+
 ### Running Tests
 
 ```bash
+# Run unit tests (no MongoDB required with autoConnect: false)
+NODE_ENV=test npm run test:unit
+
 # Run all tests
 npm test
 
