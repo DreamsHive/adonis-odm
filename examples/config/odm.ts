@@ -70,6 +70,18 @@ const odmConfig: OdmConfig = {
     paths: ['./database/seeders'],
     defaultConnection: 'mongodb',
   },
+
+  /*
+  |--------------------------------------------------------------------------
+  | Auto Connect
+  |--------------------------------------------------------------------------
+  |
+  | Whether to automatically connect to MongoDB when the application starts.
+  | Set to false in test environments to prevent connection attempts when
+  | running unit tests without a MongoDB server.
+  |
+  */
+  autoConnect: env.get('NODE_ENV') !== 'test',
 }
 
 export default odmConfig
