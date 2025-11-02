@@ -141,7 +141,7 @@
     "prettier": "^3.5.3",
     "ts-node-maintained": "^10.9.5",
     "typedoc": "^0.26.11",
-    "typescript": "~5.8"
+    "typescript": "^5.9.3"
   },
   "dependencies": {
     "@adonisjs/core": "^6.18.0",
