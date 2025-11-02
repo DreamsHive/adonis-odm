@@ -60,8 +60,10 @@ The configure command will:
 
 1. Register the MongoDB provider inside the `adonisrc.ts` file
 2. Create the `config/odm.ts` configuration file
-3. Add environment variables to your `.env` file
+3. Add environment variables to your `.env` file (preserving existing values)
 4. Set up validation rules for environment variables
+
+> **🔒 Environment Variable Preservation**: The configure command intelligently preserves any existing MongoDB environment variables in your `.env` file. Only new variables that don't already exist will be added, ensuring your custom configuration values are never overwritten.
 
 ## Configuration
 
@@ -98,6 +100,10 @@ const odmConfig = defineConfig({
       },
     },
   },
+
+  // Auto-connect to MongoDB when the application starts
+  // Set to false in test environments to prevent connection attempts
+  autoConnect: env.get('NODE_ENV') !== 'test',
 })
 
 export default odmConfig
@@ -105,14 +111,16 @@ export default odmConfig
 
 ### Environment Variables
 
-The following environment variables are used by the MongoDB configuration:
+The following environment variables are available for MongoDB configuration (all are optional):
 
 ```env
-# Basic Connection Settings
+# Connection Settings (Option 1: Use URI)
+MONGO_URI=mongodb://localhost:27017/your_database_name
+
+# Connection Settings (Option 2: Use individual components)
 MONGO_HOST=localhost
 MONGO_PORT=27017
 MONGO_DATABASE=your_database_name
-MONGO_URI=mongodb://localhost:27017/your_database_name
 
 # Authentication (optional)
 MONGO_USERNAME=your_username
@@ -127,7 +135,61 @@ MONGO_SOCKET_TIMEOUT_MS=0
 MONGO_CONNECT_TIMEOUT_MS=10000
 ```
 
-**Note**: You can use either `MONGO_URI` for a complete connection string, or individual components (`MONGO_HOST`, `MONGO_PORT`, etc.). The URI takes precedence if both are provided.
+**Note**: All MongoDB connection variables are optional. You can use either `MONGO_URI` for a complete connection string, or individual components (`MONGO_HOST`, `MONGO_PORT`, etc.). The URI takes precedence if both are provided.
+
+### Environment Variable Flexibility
+
+As of version 0.2.1+, all MongoDB environment variables are optional, giving you complete flexibility in how you configure your database connection:
+
+- **URI Only**: Use just `MONGO_URI` for simple setups
+- **Components Only**: Use individual variables like `MONGO_HOST`, `MONGO_PORT`, etc.
+- **Mixed**: Combine both approaches (URI takes precedence)
+- **Minimal**: Provide only the variables you need
+
+If you're upgrading from an earlier version and experiencing validation errors, see the [Migration Guide](./docs/MIGRATION_ENV_VARIABLES.md).
+
+### Auto-Connect Configuration
+
+The `autoConnect` option controls whether the MongoDB provider automatically connects to the database when the application starts. This is particularly useful for testing scenarios:
+
+```typescript
+const odmConfig = defineConfig({
+  connection: 'mongodb',
+  connections: {
+    // ... your connections
+  },
+
+  // Disable auto-connect in test environments
+  autoConnect: env.get('NODE_ENV') !== 'test',
+})
+```
+
+**Benefits:**
+
+- **Unit Testing**: Run unit tests without requiring a MongoDB server
+- **CI/CD Pipelines**: Tests can run in environments without database access
+- **Development Flexibility**: Control when database connections are established
+
+**Default Behavior:**
+
+- If `autoConnect` is not specified, it defaults to `true`
+- When set to `false`, you must manually call `await db.connect()` to establish connections
+- The provider will still register all services and models, just without connecting to MongoDB
+
+**Example: Manual Connection**
+
+```typescript
+import db from '#services/db'
+
+// Manually connect when needed
+await db.connect()
+
+// Your application logic
+const users = await User.all()
+
+// Close connections when done
+await db.close()
+```
 
 ### Multiple Connections
 
@@ -559,6 +621,64 @@ export default class User extends BaseModel {
 
   @column.dateTime({ autoCreate: true, autoUpdate: true })
   declare updatedAt: DateTime
+}
+```
+
+### Collection Naming
+
+The ODM follows the AdonisJS Lucid pattern for collection naming. You can specify custom collection names using the static `collection` property:
+
+```typescript
+export default class User extends BaseModel {
+  // Lucid pattern: Use static collection property
+  static collection = 'custom_users'
+
+  @column({ isPrimary: true })
+  declare _id: string
+
+  @column()
+  declare name: string
+}
+```
+
+#### Collection Naming Precedence
+
+The ODM determines collection names in the following order:
+
+1. **Static collection property** (Lucid pattern) - Highest priority
+2. **Metadata tableName** (backward compatibility)
+3. **Auto-generated from class name** - Default behavior
+
+```typescript
+// 1. Static collection property (recommended)
+class User extends BaseModel {
+  static collection = 'users' // Uses: 'users'
+}
+
+// 2. Auto-generated from class name (default)
+class AdminUser extends BaseModel {
+  // Auto-generates: 'admin_users'
+}
+
+class APIKey extends BaseModel {
+  // Auto-generates: 'a_p_i_keys'
+}
+
+class UserWithProfile extends BaseModel {
+  // Auto-generates: 'user_with_profiles'
+}
+```
+
+#### Backward Compatibility
+
+The old `getCollectionName()` method is still supported for backward compatibility:
+
+```typescript
+export default class User extends BaseModel {
+  // Still works, but static collection property is preferred
+  static getCollectionName(): string {
+    return 'users'
+  }
 }
 ```
 
@@ -2672,9 +2792,8 @@ export default class User extends BaseModel {
   @column.dateTime({ autoCreate: true, autoUpdate: true })
   declare updatedAt: DateTime
 
-  static getCollectionName(): string {
-    return 'users'
-  }
+  // Lucid pattern: Use static collection property
+  static collection = 'users'
 }
 ```
 
@@ -2686,9 +2805,44 @@ export default class User extends BaseModel {
 
 The MongoDB ODM provides comprehensive testing support with both unit tests and integration tests.
 
+### Unit Testing Without MongoDB
+
+As of version 0.2.1+, you can run unit tests without requiring a MongoDB server by using the `autoConnect` configuration option:
+
+```typescript
+// config/odm.ts
+import env from '#start/env'
+import { defineConfig } from 'adonis-odm'
+
+export default defineConfig({
+  connection: 'mongodb',
+  connections: {
+    mongodb: {
+      client: 'mongodb',
+      connection: {
+        url: env.get('MONGO_URI'),
+      },
+    },
+  },
+
+  // Disable auto-connect in test environments
+  autoConnect: env.get('NODE_ENV') !== 'test',
+})
+```
+
+With this configuration, when `NODE_ENV=test`, the MongoDB provider will not attempt to connect to the database during application startup. This allows you to:
+
+- Run unit tests in CI/CD pipelines without MongoDB
+- Test business logic without database dependencies
+- Use mocks and stubs for database operations
+- Speed up test execution
+
 ### Running Tests
 
 ```bash
+# Run unit tests (no MongoDB required with autoConnect: false)
+NODE_ENV=test npm run test:unit
+
 # Run all tests
 npm test
 

@@ -163,6 +163,7 @@ export interface SeederConfig {
  *     paths: ['./database/seeders'],
  *     defaultConnection: 'mongodb',
  *   },
+ *   autoConnect: env.get('NODE_ENV') !== 'test',
  * })
  * ```
  */
@@ -175,6 +176,13 @@ export interface OdmConfig {
 
   /** Seeder configuration options */
   seeders?: SeederConfig
+
+  /**
+   * Whether to automatically connect to MongoDB when the application starts.
+   * Set to false in test environments to prevent connection attempts.
+   * Defaults to true if not specified.
+   */
+  autoConnect?: boolean
 }
 
 /**
@@ -254,6 +262,7 @@ export interface ModelConstructor {
   getMetadata(): ModelMetadata
   getCollectionName(): string
   getConnection(): string
+  collection?: string // Static collection property (Lucid pattern)
 }
 
 /**
