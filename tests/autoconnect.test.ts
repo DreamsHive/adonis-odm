@@ -151,11 +151,6 @@ test('autoConnect provider logic', async (t) => {
   await t.test('should default to true when config is undefined', () => {
     const config = undefined
     const shouldAutoConnect = config?.autoConnect !== false
-    assert.strictEqual(
-      shouldAutoConnect,
-      true,
-      'Should auto-connect when config is undefined'
-    )
+    assert.strictEqual(shouldAutoConnect, true, 'Should auto-connect when config is undefined')
   })
 })
-
