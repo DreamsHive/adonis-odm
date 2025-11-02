@@ -99,9 +99,8 @@ class User extends BaseModel {
   @hasMany(() => Post, { localKey: '_id', foreignKey: 'authorId' })
   declare posts: HasMany<typeof Post>
 
-  static getCollectionName(): string {
-    return 'users'
-  }
+  // Lucid pattern: Use static collection property
+  static collection = 'users'
 }
 
 class Profile extends BaseModel {
@@ -117,9 +116,8 @@ class Profile extends BaseModel {
   @belongsTo(() => User, { localKey: 'userId', foreignKey: '_id' })
   declare user: BelongsTo<typeof User>
 
-  static getCollectionName(): string {
-    return 'profiles'
-  }
+  // Lucid pattern: Use static collection property
+  static collection = 'profiles'
 }
 
 class Post extends BaseModel {
@@ -135,9 +133,8 @@ class Post extends BaseModel {
   @belongsTo(() => User, { localKey: 'authorId', foreignKey: '_id' })
   declare author: BelongsTo<typeof User>
 
-  static getCollectionName(): string {
-    return 'posts'
-  }
+  // Lucid pattern: Use static collection property
+  static collection = 'posts'
 }
 
 // 🎯 SEAMLESS TYPE SAFETY DECLARATION MERGING
