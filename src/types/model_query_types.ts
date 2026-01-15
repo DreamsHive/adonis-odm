@@ -20,8 +20,9 @@ export type ExtractRelationshipKeys<T extends BaseModel> = {
 /**
  * Enhanced ModelQueryBuilder interface with model-specific relationship type safety
  */
-export interface TypeSafeModelQueryBuilder<TModel extends BaseModel>
-  extends ModelQueryBuilder<Document> {
+export interface TypeSafeModelQueryBuilder<
+  TModel extends BaseModel,
+> extends ModelQueryBuilder<Document> {
   /**
    * Type-safe load method with automatic relationship name inference
    */

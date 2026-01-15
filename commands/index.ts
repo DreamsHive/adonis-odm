@@ -2,7 +2,7 @@
  * AdonisJS MongoDB ODM Commands
  */
 
-import type { CommandMetaData } from '@adonisjs/ace/types'
+import type { CommandMetaData } from '@adonisjs/core/types/ace'
 import type { BaseCommand } from '@adonisjs/core/ace'
 import MakeOdmModel from './make_odm_model.js'
 import MakeOdmSeeder from './make_odm_seeder.js'

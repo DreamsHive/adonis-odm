@@ -1,6 +1,8 @@
 import { DateTime } from 'luxon'
 import { ObjectId } from 'mongodb'
 import { QueryOperator, QueryValue } from '../types/index.js'
+import type { NamingStrategyContract } from '../naming_strategy/naming_strategy.js'
+import type { BaseModel } from '../base_model/base_model.js'
 
 /**
  * WhereConditionsBuilder - Handles all WHERE clause construction for MongoDB queries
@@ -11,6 +13,13 @@ import { QueryOperator, QueryValue } from '../types/index.js'
 export class WhereConditionsBuilder {
   private filters: any = {}
   private orConditions: any[] = []
+  private namingStrategy?: NamingStrategyContract
+  private modelClass?: typeof BaseModel
+
+  constructor(namingStrategy?: NamingStrategyContract, modelClass?: typeof BaseModel) {
+    this.namingStrategy = namingStrategy
+    this.modelClass = modelClass
+  }
 
   /**
    * Get the current filters
@@ -41,57 +50,120 @@ export class WhereConditionsBuilder {
   }
 
   /**
+   * Convert field name to database column name using naming strategy
+   */
+  private convertFieldName(field: string): string {
+    // Skip conversion for MongoDB operators and special fields
+    if (field.startsWith('$') || field === '_id') {
+      return field
+    }
+
+    // If naming strategy is available, use it to convert the field name
+    if (this.namingStrategy && this.modelClass) {
+      return this.namingStrategy.columnName(this.modelClass, field)
+    }
+
+    // Fallback: return as-is if no naming strategy is provided
+    return field
+  }
+
+  /**
+   * Recursively convert field names in a filter object
+   */
+  private convertFilterFields(filter: any): any {
+    if (filter === null || filter === undefined) {
+      return filter
+    }
+
+    // Handle arrays (like $or conditions)
+    if (Array.isArray(filter)) {
+      return filter.map((item) => this.convertFilterFields(item))
+    }
+
+    // Handle objects
+    if (typeof filter === 'object' && filter.constructor === Object) {
+      const converted: any = {}
+
+      for (const [key, value] of Object.entries(filter)) {
+        // Convert the field name
+        const dbKey = this.convertFieldName(key)
+
+        // Recursively convert nested objects, but skip MongoDB operators
+        if (key.startsWith('$')) {
+          // MongoDB operator - keep as-is, but convert nested values
+          converted[key] = Array.isArray(value)
+            ? value.map((item) => this.convertFilterFields(item))
+            : this.convertFilterFields(value)
+        } else {
+          // Regular field - convert key and recursively process value
+          converted[dbKey] = this.convertFilterFields(value)
+        }
+      }
+
+      return converted
+    }
+
+    // Primitive values - return as-is
+    return filter
+  }
+
+  /**
    * Get the final MongoDB filter object
    */
   getFinalFilters(): any {
+    let finalFilters: any
+
     if (this.orConditions.length === 0) {
-      return this.filters
-    }
-
-    // If we have OR conditions, we need to restructure the query
-    // We want: baseFilters AND (lastAndCondition OR orCondition1 OR orCondition2...)
-
-    const filterEntries = Object.entries(this.filters)
-    if (filterEntries.length === 0) {
-      // Only OR conditions
-      return { $or: this.orConditions }
-    }
-
-    // If we have both AND and OR conditions, we need to be smart about combining them
-    // The last AND condition should be combined with OR conditions
-    const baseFilters: any = {}
-    let lastAndField: string | null = null
-    let lastAndCondition: any = null
-
-    // Separate the last AND condition from base filters
-    for (let i = 0; i < filterEntries.length; i++) {
-      const [field, condition] = filterEntries[i]
-      if (i === filterEntries.length - 1) {
-        // This is the last condition - it should be ORed with orConditions
-        lastAndField = field
-        lastAndCondition = condition
-      } else {
-        baseFilters[field] = condition
-      }
-    }
-
-    // Create the OR array with the last AND condition and all OR conditions
-    const orArray: any[] = []
-
-    if (lastAndField && lastAndCondition) {
-      orArray.push({ [lastAndField]: lastAndCondition })
-    }
-
-    orArray.push(...this.orConditions)
-
-    // Build final query
-    if (Object.keys(baseFilters).length > 0) {
-      return {
-        $and: [baseFilters, { $or: orArray }],
-      }
+      finalFilters = this.filters
     } else {
-      return { $or: orArray }
+      // If we have OR conditions, we need to restructure the query
+      // We want: baseFilters AND (lastAndCondition OR orCondition1 OR orCondition2...)
+
+      const filterEntries = Object.entries(this.filters)
+      if (filterEntries.length === 0) {
+        // Only OR conditions
+        finalFilters = { $or: this.orConditions }
+      } else {
+        // If we have both AND and OR conditions, we need to be smart about combining them
+        // The last AND condition should be combined with OR conditions
+        const baseFilters: any = {}
+        let lastAndField: string | null = null
+        let lastAndCondition: any = null
+
+        // Separate the last AND condition from base filters
+        for (let i = 0; i < filterEntries.length; i++) {
+          const [field, condition] = filterEntries[i]
+          if (i === filterEntries.length - 1) {
+            // This is the last condition - it should be ORed with orConditions
+            lastAndField = field
+            lastAndCondition = condition
+          } else {
+            baseFilters[field] = condition
+          }
+        }
+
+        // Create the OR array with the last AND condition and all OR conditions
+        const orArray: any[] = []
+
+        if (lastAndField && lastAndCondition) {
+          orArray.push({ [lastAndField]: lastAndCondition })
+        }
+
+        orArray.push(...this.orConditions)
+
+        // Build final query
+        if (Object.keys(baseFilters).length > 0) {
+          finalFilters = {
+            $and: [baseFilters, { $or: orArray }],
+          }
+        } else {
+          finalFilters = { $or: orArray }
+        }
+      }
     }
+
+    // Convert all field names in the final filter structure
+    return this.convertFilterFields(finalFilters)
   }
 
   /**
@@ -499,7 +571,7 @@ export class WhereConditionsBuilder {
    * Clone the where conditions builder
    */
   clone(): WhereConditionsBuilder {
-    const cloned = new WhereConditionsBuilder()
+    const cloned = new WhereConditionsBuilder(this.namingStrategy, this.modelClass)
     cloned.setFilters(this.filters)
     cloned.setOrConditions(this.orConditions)
     return cloned
