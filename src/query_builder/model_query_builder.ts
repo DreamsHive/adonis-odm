@@ -44,7 +44,9 @@ export class ModelQueryBuilder<
     private modelConstructor: ModelConstructor,
     transactionClient?: MongoTransactionClient
   ) {
-    this.whereBuilder = new WhereConditionsBuilder()
+    const modelClass = modelConstructor as typeof BaseModel
+    const namingStrategy = modelClass.namingStrategy
+    this.whereBuilder = new WhereConditionsBuilder(namingStrategy, modelClass)
     this.queryExecutor = new QueryExecutor(collection, modelConstructor, transactionClient)
     this.queryUtils = new QueryUtilities()
   }
